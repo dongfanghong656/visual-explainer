@@ -49,7 +49,7 @@ const CHECK_REQUEST_SCHEMA = {
 export const TOOL_DEFINITIONS = [
   {
     name: 'task_proof_snapshot',
-    description: 'Create a rename-safe deterministic Git snapshot without raw patches or arbitrary commands.',
+    description: 'Create a rename-safe, dirty-content-bound deterministic Git snapshot without raw patches or arbitrary commands.',
     inputSchema: {
       type: 'object', additionalProperties: false,
       properties: { repositoryPath: { type: 'string' }, baseRef: { type: 'string' } },
@@ -96,7 +96,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'task_proof_review',
-    description: 'Collect fresh MCP-produced evidence, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render an immutable review.',
+    description: 'Collect fresh MCP-produced evidence, require a complete working-tree fingerprint, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render an immutable review.',
     inputSchema: {
       type: 'object', additionalProperties: false, required: ['claim', 'reviewer', 'findings'],
       properties: {
@@ -157,6 +157,29 @@ function assertNoSnapshotRace(reference, fresh) {
   }
 }
 
+function assertSnapshotComparable(snapshot) {
+  if (snapshot.repository?.workingTreeFingerprintComplete === false) {
+    throw new TaskProofError(
+      'INCOMPLETE_SNAPSHOT',
+      'The dirty working tree contains a directory, submodule, or unsupported filesystem object that was not fully content-fingerprinted. No completion gate may be issued.',
+      { reasons: snapshot.repository.workingTreeFingerprintIncompleteReasons ?? [] },
+    );
+  }
+}
+
+function repositoryBinding(snapshot) {
+  return {
+    branch: snapshot.repository.branch,
+    baseSha: snapshot.repository.baseSha,
+    headSha: snapshot.repository.headSha,
+    dirty: snapshot.repository.dirty,
+    snapshotDigest: snapshot.snapshotDigest,
+    workingTreeFingerprintComplete: snapshot.repository.workingTreeFingerprintComplete,
+    workingTreeFingerprintIncompleteReasons: snapshot.repository.workingTreeFingerprintIncompleteReasons,
+    workingTreeHashedBytes: snapshot.repository.workingTreeHashedBytes,
+  };
+}
+
 export async function handleTaskProofTool(name, rawArguments = {}) {
   const args = asObject(rawArguments ?? {}, 'arguments');
   const repositoryPath = args.repositoryPath ?? process.cwd();
@@ -186,13 +209,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
         protocolVersion: PROTOCOL_VERSION,
         kind: CLAIM_KIND,
         generatedAt: original.generatedAt ?? new Date().toISOString(),
-        repository: {
-          branch: snapshot.repository.branch,
-          baseSha: snapshot.repository.baseSha,
-          headSha: snapshot.repository.headSha,
-          dirty: snapshot.repository.dirty,
-          snapshotDigest: snapshot.snapshotDigest,
-        },
+        repository: repositoryBinding(snapshot),
       };
       const validation = validateClaimModel(claim);
       if (!validation.ok) throw new TaskProofError('INVALID_CLAIM', 'Claim validation failed.', validation);
@@ -202,6 +219,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       });
       return {
         status: 'UNVERIFIED',
+        snapshotComparable: snapshot.repository.workingTreeFingerprintComplete,
         rule: 'Claimant output is never proof of completion. Only task_proof_review may compute a gate.',
         claim,
         files,
@@ -230,13 +248,18 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       }
       const collected = mergeReviewEvidence(collections);
       const snapshot = collected.snapshot ?? createRepositorySnapshot({ repositoryPath, baseRef });
+      assertSnapshotComparable(snapshot);
       const finalSnapshot = createRepositorySnapshot({ repositoryPath, baseRef });
+      assertSnapshotComparable(finalSnapshot);
       assertNoSnapshotRace(snapshot, finalSnapshot);
       const review = finalizeReviewStrict({
         claim, reviewer, snapshot,
         findings: Array.isArray(args.findings) ? args.findings : [],
         reviewEvidence: collected.evidence,
       });
+      review.repository.workingTreeFingerprintComplete = snapshot.repository.workingTreeFingerprintComplete;
+      review.repository.workingTreeFingerprintIncompleteReasons = snapshot.repository.workingTreeFingerprintIncompleteReasons;
+      review.repository.workingTreeHashedBytes = snapshot.repository.workingTreeHashedBytes;
       const files = writeTaskProofArtifacts({
         artifact: review, repositoryPath, basename: args.basename ?? `${claim.task.id}-review`,
       });
