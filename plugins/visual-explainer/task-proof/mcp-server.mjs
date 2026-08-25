@@ -15,6 +15,7 @@ import {
   finalizeReviewStrict,
   mergeReviewEvidence,
   probeRepositoryEvidenceStrict,
+  validateClaimEvidencePolicy,
 } from './hardening.mjs';
 import { runNamedChecksStrict } from './named-checks.mjs';
 
@@ -170,6 +171,17 @@ function textResult(payload, isError = false) {
   };
 }
 
+function validateClaimModel(claim) {
+  const structural = validateClaim(claim);
+  const policy = validateClaimEvidencePolicy(claim);
+  return {
+    ok: structural.ok && policy.ok,
+    errors: [...structural.errors, ...policy.errors],
+    warnings: structural.warnings,
+    digest: structural.ok && policy.ok ? structural.digest : undefined,
+  };
+}
+
 function assertNoSnapshotRace(reference, fresh) {
   if (reference.snapshotDigest !== fresh.snapshotDigest) {
     throw new TaskProofError('SNAPSHOT_RACE', 'Repository changed after evidence collection. Restart the review.', {
@@ -204,7 +216,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       });
 
     case 'task_proof_validate_claim':
-      return validateClaim(asObject(args.claim, 'claim'));
+      return validateClaimModel(asObject(args.claim, 'claim'));
 
     case 'task_proof_claim': {
       const original = asObject(args.claim, 'claim');
@@ -222,7 +234,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
           snapshotDigest: snapshot.snapshotDigest,
         },
       };
-      const validation = validateClaim(claim);
+      const validation = validateClaimModel(claim);
       if (!validation.ok) throw new TaskProofError('INVALID_CLAIM', 'Claim validation failed.', validation);
       claim.artifactDigest = validation.digest;
       const files = writeTaskProofArtifacts({
@@ -240,6 +252,8 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
 
     case 'task_proof_review': {
       const claim = asObject(args.claim, 'claim');
+      const claimValidation = validateClaimModel(claim);
+      if (!claimValidation.ok) throw new TaskProofError('INVALID_CLAIM', 'Review input claim validation failed.', claimValidation);
       const reviewer = asObject(args.reviewer, 'reviewer');
       if (reviewer.runId === claim.producer?.runId) {
         throw new TaskProofError('NOT_INDEPENDENT', 'reviewer.runId must differ from claim.producer.runId.');
