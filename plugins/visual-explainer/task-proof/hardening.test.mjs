@@ -8,7 +8,6 @@ import {
   CLAIM_KIND,
   PROTOCOL_VERSION,
   TaskProofError,
-  createRepositorySnapshot,
   sha256,
 } from './core.mjs';
 import {
@@ -18,6 +17,7 @@ import {
   verifyMcpReceipt,
 } from './hardening.mjs';
 import { runNamedChecksStrict } from './named-checks.mjs';
+import { createRepositorySnapshotStrict as createRepositorySnapshot } from './snapshot.mjs';
 
 function git(repo, ...args) {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
