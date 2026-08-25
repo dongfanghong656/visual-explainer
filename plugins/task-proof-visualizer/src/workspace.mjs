@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -133,9 +134,22 @@ function safeOutputName(value) {
   return normalized;
 }
 
+function prepareOutputDir(root) {
+  const outputDir = join(root, '.task-proof');
+  if (existsSync(outputDir)) {
+    if (lstatSync(outputDir).isSymbolicLink()) {
+      throw new Error('refusing to write through a symlinked .task-proof directory');
+    }
+  } else {
+    mkdirSync(outputDir, { recursive: false });
+  }
+  const resolvedOutputDir = realpathSync(outputDir);
+  if (!isInside(root, resolvedOutputDir)) throw new Error('.task-proof resolves outside workspace');
+  return resolvedOutputDir;
+}
+
 function atomicCreate(path, content) {
   if (existsSync(path)) throw new Error(`refusing to overwrite existing proof artifact: ${path}`);
-  mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
   try {
     writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx' });
@@ -149,7 +163,7 @@ function atomicCreate(path, content) {
 export function writeBundle({ workspaceRoot, manifest, outputName, view = 'status' }) {
   const root = resolveWorkspace(workspaceRoot);
   const name = safeOutputName(outputName);
-  const outputDir = join(root, '.task-proof');
+  const outputDir = prepareOutputDir(root);
   const bundle = renderBundle(manifest, { view });
   const paths = {
     manifest: join(outputDir, `${name}.json`),
@@ -158,12 +172,27 @@ export function writeBundle({ workspaceRoot, manifest, outputName, view = 'statu
     validation: join(outputDir, `${name}.validation.json`),
   };
   for (const path of Object.values(paths)) {
+    if (!isInside(outputDir, path)) throw new Error('proof artifact path escapes output directory');
     if (existsSync(path)) throw new Error(`refusing to overwrite existing proof artifact: ${path}`);
   }
-  atomicCreate(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
-  atomicCreate(paths.markdown, `${bundle.markdown}\n`);
-  atomicCreate(paths.mermaid, `${bundle.mermaid}\n`);
-  atomicCreate(paths.validation, `${JSON.stringify(bundle.validation, null, 2)}\n`);
+
+  const created = [];
+  try {
+    atomicCreate(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
+    created.push(paths.manifest);
+    atomicCreate(paths.markdown, `${bundle.markdown}\n`);
+    created.push(paths.markdown);
+    atomicCreate(paths.mermaid, `${bundle.mermaid}\n`);
+    created.push(paths.mermaid);
+    atomicCreate(paths.validation, `${JSON.stringify(bundle.validation, null, 2)}\n`);
+    created.push(paths.validation);
+  } catch (error) {
+    for (const path of created.reverse()) {
+      if (existsSync(path)) unlinkSync(path);
+    }
+    throw error;
+  }
+
   return {
     validation: bundle.validation,
     paths: Object.fromEntries(
