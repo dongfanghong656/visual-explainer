@@ -3,49 +3,76 @@
 Task Proof separates two statements:
 
 1. **Claim:** an implementing agent declares what it believes it changed.
-2. **Review:** a different run independently checks the declaration and computes the only authoritative completion gate.
+2. **Review:** a different run independently reconstructs the contract, collects fresh evidence, and computes the only authoritative completion gate.
 
-The diagram is a view of digest-bound artifacts. It is never the fact source by itself.
+The diagram is a view of digest-bound JSON. It is never the fact source by itself.
 
-## Roles
+## 1. Roles and authority
 
-| Role | May declare work | May issue completion gate |
-|---|---:|---:|
-| Claimant | Yes | No |
-| Reviewer | No | Yes, through computed rules |
-| Renderer | No | No |
+| Role | May declare work | May collect evidence | May issue completion gate |
+|---|---:|---:|---:|
+| Claimant | Yes | Claimant evidence only | No |
+| Reviewer | No | Fresh reviewer evidence | Yes, through the computed gate |
+| Renderer | No | No | No |
 
-The reviewer run ID MUST differ from the claimant run ID. A claimant artifact MUST NOT contain `verified`, `verdict`, `gate`, or equivalent self-approval fields. A review tool MAY downgrade a requested verdict but MUST NOT upgrade unsupported evidence.
+The reviewer run ID MUST differ from the claimant run ID. A different run ID is protocol separation, not cryptographic identity; therefore a gate MUST depend on fresh machine observations, not on reviewer prose. A claimant artifact MUST NOT contain `verified`, `verdict`, `gate`, or equivalent self-approval fields. A review tool MAY downgrade a requested verdict but MUST NOT upgrade unsupported evidence.
 
-## Snapshot binding
+## 2. Snapshot binding
 
-Every claim MUST bind full base/head SHAs, branch or detached state, dirty-tree flag, and a deterministic snapshot digest. The digest covers committed and working-tree change names, recent commits, branch, base, head, and sanitized remote identity. It excludes wall-clock time and raw patch content.
+Every claim binds full base/head SHAs, branch or detached state, dirty-tree flag, and a deterministic snapshot digest. The digest covers committed and working-tree change names, recent commits, branch, base, head, and sanitized remote identity. It excludes wall-clock time and raw patch content.
 
-A review MUST recreate the snapshot. Head or snapshot mismatch makes declared completion `stale`, which cannot receive `PASS`.
+A review recreates the snapshot. Head or snapshot mismatch makes declared completion `stale`, which cannot receive `PASS`. If the repository changes while evidence is being collected, the review is aborted as a snapshot race and must restart.
 
-## Status vocabulary
+## 3. Status vocabulary
 
-Claimant: `declared_done`, `partial`, `blocked`, `not_done`.
+Claimant statuses:
 
-Reviewer: `verified`, `partially_verified`, `unsupported`, `contradicted`, `stale`, `not_applicable`.
+- `declared_done`;
+- `partial`;
+- `blocked`;
+- `not_done`.
+
+Reviewer verdicts:
+
+- `verified`;
+- `partially_verified`;
+- `unsupported`;
+- `contradicted`;
+- `stale`;
+- `not_applicable`.
 
 Only review artifacts use `PASS`, `PASS_WITH_LIMITS`, `FAIL`, or `INCONCLUSIVE`.
 
-## Evidence trust
+## 4. Evidence levels
 
-| Level | Value | Meaning | Independently verifies completion? |
+| Level | Value | Meaning | Can independently verify completion? |
 |---:|---|---|---:|
 | E0 | `self_report` | Natural-language assertion | No |
-| E1 | `artifact` | File, commit, or output exists | No, by itself |
-| E2 | `deterministic` | Reproducible machine observation | Yes, when produced by reviewer run |
-| E3 | `independent` | Independent reviewer/system result | Yes |
-| E4 | `external` | Real-world acceptance | Yes |
+| E1 | `artifact` | Claimant points to a file, commit, or output | No, by itself |
+| E2 | `deterministic` | MCP-produced reproducible observation at the review snapshot | Yes, for explicitly covered criteria |
+| E3 | `independent` | Attested result from a separate trusted system | Only with a verifiable attestation policy |
+| E4 | `external` | Real-world acceptance or deployment evidence | Only with a verifiable attestation policy |
 
-Test/build evidence MUST record a structured exit code. Failing evidence cannot support `declared_done`. Claimant-produced evidence cannot be independent or external.
+The current reference MCP grants gate authority only to E2 receipts it produces itself. E3/E4 storage may be added later, but unverified caller-supplied labels do not grant a gate.
 
-## Computed gate
+Test and build evidence records a structured exit code. A failing check never supports `verified`. Claimant-produced evidence cannot be independent or external.
 
-For every `declared_done` claim, acceptance criteria and claimant evidence are required. The reviewer must issue a finding. `verified` requires reviewer-produced E2+ evidence and a matching snapshot.
+## 5. Criterion-level coverage
+
+Every declared-done claim references acceptance criteria. A reviewer receipt lists both `supportsClaimIds` and `supportsCriterionIds`; evidence that is merely present but unrelated cannot verify the claim.
+
+An acceptance criterion may set `requiredEvidenceKinds`, for example:
+
+- source or documentation change: `file` or `diffstat`;
+- runtime behavior: `test`;
+- packaging: `build`;
+- deployment or hardware acceptance: a future attested `external` receipt.
+
+A `verified` finding is downgraded to `unsupported` unless every referenced criterion is covered by at least one successful, digest-valid, reviewer-produced receipt of an allowed kind.
+
+## 6. Computed gate
+
+For every `declared_done` claim, acceptance criteria and claimant evidence are required. The reviewer must issue one finding per claim.
 
 - any `unsupported` or `contradicted` declared-done claim → `FAIL`;
 - any `stale` declared-done claim → `INCONCLUSIVE`;
@@ -55,24 +82,49 @@ For every `declared_done` claim, acceptance criteria and claimant evidence are r
 
 Caller-provided gate values are ignored.
 
-## Safe probes
+## 7. Safe observations and named checks
 
-The MCP may only create deterministic receipts for an allowlisted read-only set: regular-file digest, full commit-SHA existence, and changed repository path. It MUST use process argument arrays rather than a shell; reject absolute paths, traversal, NUL bytes, symlinks, oversized files, unsafe refs, and excessive probe counts; and MUST NOT execute caller-supplied test commands.
+Read-only MCP probes are allowlisted:
 
-## Visual grammar
+- regular-file digest;
+- full commit-SHA existence;
+- changed repository path.
 
-A Task Proof picture MUST fit a 16:9 one-screen view and include pinned branch/head and digest, objective, one-sentence change thesis, no more than four primary claims, causal `BEFORE → CHANGE → AFTER` logic, evidence identifiers, and an unmistakable `UNVERIFIED` claimant badge or computed review gate.
+They use process argument arrays rather than a shell and reject absolute paths, traversal, NUL bytes, symlinks, parent-symlink physical escapes, oversized files, unsafe refs, and excessive probe counts.
 
-The SVG must include a text alternative and escape untrusted text. The claim view must state that the claimant cannot verify itself.
+Behavioral checks are repository-owned named checks in `.task-proof/checks.json`. The caller supplies only a check ID and evidence bindings, never a command. Execution:
 
-## Artifact set
+- is disabled by default;
+- requires `TASK_PROOF_ALLOW_EXECUTION=1` after operator review;
+- uses `spawnSync(..., shell: false)`;
+- confines `cwd` to the repository;
+- limits duration and captured output;
+- uses a minimal environment;
+- records policy, command, argument, output, exit, duration, and snapshot digests.
 
-Each render writes atomically under `.artifacts/task-proof/`: canonical JSON, SVG, self-contained HTML, and a manifest with SHA-256 digests. Output names are sanitized and cannot escape the repository. JSON is the semantic fact source.
+Repository checks still execute repository code. Explicit operator opt-in is a security boundary, not a formality.
 
-## Honesty rules
+## 8. Visual grammar
+
+A Task Proof picture fits a 16:9 one-screen view and includes pinned branch/head and digest, objective, one-sentence change thesis, no more than four primary claims, causal `BEFORE → CHANGE → AFTER` logic, evidence identifiers, and an unmistakable `UNVERIFIED` claimant badge or computed review gate.
+
+The SVG includes a text alternative and escapes untrusted text. The claim view states that the claimant cannot verify itself.
+
+## 9. Artifact set
+
+Each render writes under `.artifacts/task-proof/`:
+
+- semantic JSON;
+- SVG;
+- self-contained HTML;
+- a manifest with SHA-256 digests.
+
+Output names are sanitized and cannot escape the repository. JSON is the semantic fact source. A screenshot without JSON and manifest is presentation only.
+
+## 10. Honesty rules
 
 - Missing evidence is `unsupported`, not probably done.
 - Dirty state is disclosed and digest-bound.
-- A screenshot without JSON and manifest is presentation only.
-- Unit tests do not prove external hardware, user acceptance, deployment, or release.
-- Committed, merged, released, and deployed are separate claims with separate evidence.
+- Unit tests do not prove hardware, user acceptance, deployment, release, or production readiness.
+- Committed, merged, released, deployed, and externally accepted are separate claims with separate evidence.
+- A passing gate is valid only for the exact claim digest and reviewed snapshot digest recorded in the review artifact.
