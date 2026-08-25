@@ -1,87 +1,45 @@
 ---
-name: task-proof-review
-description: Independently review an AI task-completion claim and render an evidence verdict
+description: Independently audit a Task Proof claim, reproduce criterion-level evidence, and compute the only authoritative completion gate.
+argument-hint: <claim-json-path>
 ---
 
-Load the visual-explainer skill and enter **Task Proof reviewer mode**. Read `./task-proof/PROTOCOL.md`, `./task-proof/schema.json`, and both examples before assessing the claim named by `$@`.
+# Task Proof Review — independent reviewer workflow
 
-Interpret `$@` as the path to an author `.task-proof.json` bundle, with optional repository workspace or test instructions. This command must be run by a reviewer agent/run distinct from the author run recorded in the claim. When independence cannot be established, stop with a non-accepted result rather than pretending the review is independent.
+You are the reviewer. Do not continue implementation while reviewing. Do not accept a diagram, screenshot, prose summary, checklist, claimant confidence, or claimant-produced test statement as proof.
 
-## Non-negotiable trust boundary
+## 1. Establish independence and pin reality
 
-- Treat the author diagram, narrative, checkboxes, and completion status as claims to test, not as facts.
-- Reuse the same protocol and renderer, but collect reviewer evidence independently.
-- Author-agent evidence may provide context; it cannot by itself satisfy reviewer verification.
-- Green is allowed only for criteria independently verified against the exact claimed scope.
-- Never repair implementation defects during the review and then accept the original claim without creating a new author claim for the changed scope.
+Use a reviewer run ID different from `claim.producer.runId`. Call `task_proof_snapshot` and confirm repository identity, full base/head SHAs, branch or detached state, dirty-tree state, and snapshot digest. A head or snapshot mismatch makes prior declared completion stale.
 
-## 1. Load and validate the author claim
+A different run ID is a protocol separation marker, not cryptographic identity. Therefore the gate must depend on fresh MCP-produced observations, not on the reviewer merely renaming itself.
 
-Read the claim JSON in full. Call `task_proof_validate_claim` before review. If it is invalid, stop the acceptance workflow, report the protocol defects, and request a corrected author bundle. A protocol-invalid claim cannot be passed to the deterministic review renderer.
+## 2. Reconstruct the contract independently
 
-Extract the exact task contract, acceptance criteria, base/head revisions, dirty flag, snapshot digest, changed paths, evidence locators, claimed mechanism, risks, and unknowns.
+Read the original requirement, specification, acceptance criteria, implementation, tests, decisions, risks, and release boundary. Treat the claim only as propositions to test. Check the old failure chain, changed control/data flow, state ownership, lifecycle, concurrency and cancellation paths, errors and degradation, invariants, termination, regressions, and compatibility.
 
-## 2. Prove scope freshness first
+## 3. Reproduce criterion-level evidence
 
-Call `task_proof_git_snapshot` in the target repository using the claim's base revision. Compare:
+Use `task_proof_probe` for allowlisted read-only observations:
 
-- repository identity and branch;
-- base revision;
-- head revision;
-- dirty state and snapshot digest;
-- changed-file set relevant to the claim.
+- `file_digest`;
+- `commit_exists` with a full SHA;
+- `changed_path`.
 
-If the repository or worktree no longer matches, set `overallVerdict: "stale"`. Do not run a nominal acceptance against a different scope and attribute it to the old claim.
+Every probe must explicitly list `supportsClaimIds` and `supportsCriterionIds`. An unrelated file or commit cannot verify a criterion.
 
-## 3. Review each criterion independently
+For behavioral checks, use repository-defined named checks from `.task-proof/checks.json` through `task_proof_run_checks`. The MCP never accepts a caller-provided command and does not use a shell. Named execution is disabled unless the operator explicitly starts the server with `TASK_PROOF_ALLOW_EXECUTION=1` after reviewing the policy.
 
-For each acceptance criterion:
+## 4. Submit findings and compute the gate
 
-1. inspect the relevant changed and surrounding code;
-2. inspect before/after behavior when the criterion concerns a change;
-3. run the most direct safe test, build, lint, trace, or controlled reproduction available;
-4. check negative, interruption, fallback, lifecycle, and boundary cases implied by the mechanism;
-5. capture durable reviewer evidence with command, exit code, revision, locator, and limitation;
-6. assign exactly one verdict: `verified`, `contradicted`, `unsupported`, `blocked`, or `not-assessed`.
+Issue one finding per claim: `verified`, `partially_verified`, `unsupported`, `contradicted`, `stale`, or `not_applicable`. Cite only evidence IDs collected during this review. A requested `verified` finding is downgraded unless every referenced acceptance criterion is covered by a valid MCP receipt of an allowed evidence kind.
 
-Do not use absence of a failing test as proof of correctness. Do not infer integration, external-system, hardware, user, release, performance, security, or scientific acceptance from narrower unit evidence.
+Call `task_proof_review` with the claim, reviewer identity, findings, probes, and named-check requests. The tool collects evidence at one snapshot, detects repository races, binds receipt and artifact digests, computes the gate, and renders review JSON/SVG/HTML/manifest.
 
-## 4. Audit the change-logic diagram
+- `PASS`: every `declared_done` claim is independently verified at the pinned snapshot.
+- `PASS_WITH_LIMITS`: no declared-done claim fails, but at least one is only partially verified.
+- `FAIL`: any declared-done claim is unsupported or contradicted.
+- `INCONCLUSIVE`: evidence is stale or incomparable, or there is no declared-done claim.
 
-Compare each important actor, event, invariant, and termination claim against source and runtime evidence. Record discrepancies when:
+## 5. Report the boundary
 
-- an arrow has no corresponding code path or trace;
-- an asynchronous boundary lacks freshness/cancellation protection;
-- ownership or write authority is misrepresented;
-- an error, fallback, or user-interrupt path was omitted;
-- the claimed termination condition does not actually stop further writes/actions;
-- the diagram explains intent but not implemented behavior.
-
-The review page may show the author diagram for context, but the criterion-verdict and mechanism-check tables are authoritative.
-
-## 5. Build, validate, and render the review bundle
-
-Create a `task-review` JSON object conforming to `./task-proof/schema.json`, with a distinct reviewer run ID, exact reviewed repository/scope, independently collected structured `git-snapshot` evidence, substantive evidence for every verified or contradicted criterion/event/invariant, one result for every criterion, discrepancies, residual risks, overall verdict, and corrected completion. A snapshot or pointer back to the claim proves scope/context only and cannot substantiate behavior by itself.
-
-Verdict constraints:
-
-- `accepted` requires exact scope match, every criterion independently `verified`, exactly one `verified` check for every claimed event and invariant, and no critical or major discrepancy.
-- `verified-complete` is valid only with `accepted`.
-- any scope mismatch requires `stale`.
-- a contradicted criterion prevents acceptance.
-- missing external evidence remains `blocked` or `not-assessed`, never silently passed.
-
-Call `task_proof_validate_review` with both claim and review. Resolve every validation error by correcting the review or downgrading the verdict. Then call `task_proof_render_review`; use its deterministic HTML and sibling `.task-proof.json` sidecar.
-
-## 6. Review language
-
-Report:
-
-- claim ID, review ID, and exact reviewed scope;
-- `accepted`, `partially-accepted`, `rejected`, `blocked`, or `stale`;
-- corrected completion status;
-- verified, contradicted, unsupported, and unassessed criteria;
-- implementation discrepancies and residual risks;
-- paths to the review HTML and JSON bundle.
-
-Do not say the task is verified complete unless the validated review bundle says `accepted` and `verified-complete` for an exact matching scope.
+Report the gate, claim/review/snapshot digests, verdict groups, checks actually rerun, dirty state, unresolved risks, evidence needed to change the verdict, and output paths. Never infer merged, released, deployed, externally accepted, or production-ready from implementation tests.
