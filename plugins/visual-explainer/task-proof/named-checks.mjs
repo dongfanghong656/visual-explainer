@@ -1,5 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  closeSync,
+  lstatSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   TaskProofError,
@@ -14,6 +25,7 @@ const POLICY_PATH = '.task-proof/checks.json';
 const RECEIPT_ISSUER = 'visual-explainer-task-proof-mcp';
 const MAX_POLICY_BYTES = 1024 * 1024;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_EXECUTABLE_BYTES = 256 * 1024 * 1024;
 const MAX_CHECKS = 20;
 const MAX_ARGS = 128;
 const MAX_ARG_CHARS = 8192;
@@ -79,23 +91,57 @@ function loadPolicy(root) {
   return { policy, digest: sha256(bytes) };
 }
 
-function resolveExecutable(command) {
-  if (command === 'node') {
-    return { executable: realpathSync(process.execPath), label: 'node', runtime: process.version };
-  }
-  if (typeof command !== 'string' || command.trim() === '' || command.startsWith('-') || /[\0\r\n]/.test(command)) {
-    throw new TaskProofError('CHECK_COMMAND', 'Named-check executable is unsafe.');
-  }
-  if (!path.isAbsolute(command)) {
-    throw new TaskProofError('CHECK_COMMAND_RELATIVE', `Named-check executable must be "node" or an absolute path: ${command}`);
-  }
-  let stat;
-  try { stat = lstatSync(command); }
-  catch { throw new TaskProofError('CHECK_COMMAND_MISSING', `Named-check executable does not exist: ${command}`); }
+function digestExecutable(filename) {
+  const stat = lstatSync(filename);
   if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new TaskProofError('CHECK_COMMAND_FILE', `Named-check executable must be a regular non-symlink file: ${command}`);
+    throw new TaskProofError('CHECK_COMMAND_FILE', `Named-check executable must be a regular non-symlink file: ${filename}`);
   }
-  return { executable: realpathSync(command), label: path.basename(command), runtime: null };
+  if (stat.size > MAX_EXECUTABLE_BYTES) {
+    throw new TaskProofError('CHECK_COMMAND_LARGE', `Named-check executable exceeds ${MAX_EXECUTABLE_BYTES} bytes: ${filename}`);
+  }
+  const descriptor = openSync(filename, 'r');
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  let size = 0;
+  try {
+    while (true) {
+      const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytes === 0) break;
+      size += bytes;
+      hash.update(buffer.subarray(0, bytes));
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return { size, digest: `sha256:${hash.digest('hex')}` };
+}
+
+function resolveExecutable(command) {
+  let executable;
+  let label;
+  let runtime = null;
+  if (command === 'node') {
+    executable = realpathSync(process.execPath);
+    label = 'node';
+    runtime = process.version;
+  } else {
+    if (typeof command !== 'string' || command.trim() === '' || command.startsWith('-') || /[\0\r\n]/.test(command)) {
+      throw new TaskProofError('CHECK_COMMAND', 'Named-check executable is unsafe.');
+    }
+    if (!path.isAbsolute(command)) {
+      throw new TaskProofError('CHECK_COMMAND_RELATIVE', `Named-check executable must be "node" or an absolute path: ${command}`);
+    }
+    let stat;
+    try { stat = lstatSync(command); }
+    catch { throw new TaskProofError('CHECK_COMMAND_MISSING', `Named-check executable does not exist: ${command}`); }
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new TaskProofError('CHECK_COMMAND_FILE', `Named-check executable must be a regular non-symlink file: ${command}`);
+    }
+    executable = realpathSync(command);
+    label = path.basename(command);
+  }
+  const integrity = digestExecutable(executable);
+  return { executable, label, runtime, executableDigest: integrity.digest, executableSizeBytes: integrity.size };
 }
 
 function normalizeDefinition(raw, root) {
@@ -138,6 +184,26 @@ function receipt({ snapshotDigest, evidenceId, observation, supportsClaimIds, su
   return value;
 }
 
+function isolatedEnvironment(home) {
+  const nullDevice = process.platform === 'win32' ? 'NUL' : '/dev/null';
+  return {
+    PATH: process.env.PATH ?? '',
+    HOME: home,
+    USERPROFILE: home,
+    TMPDIR: home,
+    TMP: home,
+    TEMP: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    XDG_CACHE_HOME: path.join(home, '.cache'),
+    NPM_CONFIG_USERCONFIG: path.join(home, '.npmrc'),
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: nullDevice,
+    SYSTEMROOT: process.env.SYSTEMROOT ?? '',
+    CI: 'true',
+    NO_COLOR: '1',
+  };
+}
+
 export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requests = [], baseRef } = {}) {
   ensureId(reviewerRunId, 'reviewerRunId');
   if (process.env.TASK_PROOF_ALLOW_EXECUTION !== '1') {
@@ -159,98 +225,102 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
     definitions.set(definition.id, definition);
   }
 
-  const seenEvidenceIds = new Set();
-  const evidence = requests.map((request, index) => {
-    if (!isRecord(request)) throw new TaskProofError('CHECK_REQUEST', `Check request ${index} must be an object.`);
-    const unknownFields = Object.keys(request).filter((key) => !REQUEST_FIELDS.has(key));
-    if (unknownFields.length > 0) {
-      throw new TaskProofError('CHECK_REQUEST_FIELD', `Check request ${index} contains caller-controlled fields: ${unknownFields.join(', ')}.`);
-    }
-    const evidenceId = ensureId(request.id, `check request ${index}`);
-    if (seenEvidenceIds.has(evidenceId)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate check evidence id: ${evidenceId}`);
-    seenEvidenceIds.add(evidenceId);
-    const supportsClaimIds = uniqueIds(request.supportsClaimIds, 'supportsClaimIds');
-    const supportsCriterionIds = uniqueIds(request.supportsCriterionIds, 'supportsCriterionIds');
-    if (supportsClaimIds.length === 0 || supportsCriterionIds.length === 0) {
-      throw new TaskProofError('UNBOUND_EVIDENCE', `Named check evidence ${evidenceId} must support at least one claim and one criterion.`);
-    }
-    const definition = definitions.get(request.checkId);
-    if (!definition) throw new TaskProofError('UNKNOWN_CHECK', `Named check is not allowlisted: ${request.checkId}`);
-    if (request.kind !== undefined && request.kind !== definition.kind) {
-      throw new TaskProofError('CHECK_KIND_MISMATCH', `Caller requested ${request.kind} but policy defines ${definition.kind} for ${definition.id}.`);
-    }
+  const isolatedHome = mkdtempSync(path.join(os.tmpdir(), 'task-proof-check-home-'));
+  try {
+    const seenEvidenceIds = new Set();
+    const evidence = requests.map((request, index) => {
+      if (!isRecord(request)) throw new TaskProofError('CHECK_REQUEST', `Check request ${index} must be an object.`);
+      const unknownFields = Object.keys(request).filter((key) => !REQUEST_FIELDS.has(key));
+      if (unknownFields.length > 0) {
+        throw new TaskProofError('CHECK_REQUEST_FIELD', `Check request ${index} contains caller-controlled fields: ${unknownFields.join(', ')}.`);
+      }
+      const evidenceId = ensureId(request.id, `check request ${index}`);
+      if (seenEvidenceIds.has(evidenceId)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate check evidence id: ${evidenceId}`);
+      seenEvidenceIds.add(evidenceId);
+      const supportsClaimIds = uniqueIds(request.supportsClaimIds, 'supportsClaimIds');
+      const supportsCriterionIds = uniqueIds(request.supportsCriterionIds, 'supportsCriterionIds');
+      if (supportsClaimIds.length === 0 || supportsCriterionIds.length === 0) {
+        throw new TaskProofError('UNBOUND_EVIDENCE', `Named check evidence ${evidenceId} must support at least one claim and one criterion.`);
+      }
+      const definition = definitions.get(request.checkId);
+      if (!definition) throw new TaskProofError('UNKNOWN_CHECK', `Named check is not allowlisted: ${request.checkId}`);
+      if (request.kind !== undefined && request.kind !== definition.kind) {
+        throw new TaskProofError('CHECK_KIND_MISMATCH', `Caller requested ${request.kind} but policy defines ${definition.kind} for ${definition.id}.`);
+      }
 
-    const startedAt = new Date().toISOString();
-    const started = Date.now();
-    const execution = spawnSync(definition.executable, definition.args, {
-      cwd: definition.cwd,
-      encoding: 'utf8',
-      shell: false,
-      timeout: definition.timeoutMs,
-      maxBuffer: definition.maxOutputBytes,
-      windowsHide: true,
-      env: {
-        PATH: process.env.PATH ?? '',
-        HOME: process.env.HOME ?? '',
-        USERPROFILE: process.env.USERPROFILE ?? '',
-        SYSTEMROOT: process.env.SYSTEMROOT ?? '',
-        CI: 'true',
-        NO_COLOR: '1',
-      },
-    });
-    const stdout = execution.stdout ?? '';
-    const stderr = execution.stderr ?? '';
-    const exitCode = Number.isInteger(execution.status) ? execution.status : 1;
-    const observation = {
-      type: 'named_check',
-      policyPath: POLICY_PATH,
-      policyDigest,
-      checkId: definition.id,
-      evidenceKind: definition.kind,
-      command: definition.label,
-      runtime: definition.runtime,
-      executablePathDigest: sha256(definition.executable),
-      args: definition.args,
-      cwd: path.relative(root, definition.cwd).split(path.sep).join('/') || '.',
-      startedAt,
-      durationMs: Date.now() - started,
-      exitCode,
-      signal: execution.signal ?? null,
-      timedOut: Boolean(execution.error?.code === 'ETIMEDOUT'),
-      errorCode: execution.error?.code ?? null,
-      stdoutBytes: Buffer.byteLength(stdout, 'utf8'),
-      stderrBytes: Buffer.byteLength(stderr, 'utf8'),
-      stdoutDigest: sha256(stdout),
-      stderrDigest: sha256(stderr),
-    };
-    return {
-      id: evidenceId,
-      kind: definition.kind,
-      locator: `named-check:${definition.id}`,
-      observedAt: startedAt,
-      digest: sha256(observation),
-      producerRunId: reviewerRunId,
-      trust: 'deterministic',
-      result: {
+      const startedAt = new Date().toISOString();
+      const started = Date.now();
+      const execution = spawnSync(definition.executable, definition.args, {
+        cwd: definition.cwd,
+        encoding: 'utf8',
+        shell: false,
+        timeout: definition.timeoutMs,
+        maxBuffer: definition.maxOutputBytes,
+        windowsHide: true,
+        env: isolatedEnvironment(isolatedHome),
+      });
+      const postIntegrity = digestExecutable(definition.executable);
+      if (postIntegrity.digest !== definition.executableDigest || postIntegrity.size !== definition.executableSizeBytes) {
+        throw new TaskProofError('CHECK_EXECUTABLE_CHANGED', `Named-check executable changed during execution: ${definition.label}`);
+      }
+      const stdout = execution.stdout ?? '';
+      const stderr = execution.stderr ?? '';
+      const exitCode = Number.isInteger(execution.status) ? execution.status : 1;
+      const observation = {
+        type: 'named_check',
+        policyPath: POLICY_PATH,
+        policyDigest,
+        checkId: definition.id,
+        evidenceKind: definition.kind,
+        command: definition.label,
+        runtime: definition.runtime,
+        executableDigest: definition.executableDigest,
+        executableSizeBytes: definition.executableSizeBytes,
+        args: definition.args,
+        cwd: path.relative(root, definition.cwd).split(path.sep).join('/') || '.',
+        isolatedHome: true,
+        startedAt,
+        durationMs: Date.now() - started,
         exitCode,
-        summary: exitCode === 0 ? 'Named check passed.' : `Named check failed${observation.timedOut ? ' by timeout' : ''}.`,
-      },
-      receipt: receipt({
-        snapshotDigest: before.snapshotDigest,
-        evidenceId,
-        observation,
-        supportsClaimIds,
-        supportsCriterionIds,
-      }),
-    };
-  });
-
-  const after = createRepositorySnapshot({ repositoryPath: root, baseRef });
-  if (after.snapshotDigest !== before.snapshotDigest) {
-    throw new TaskProofError('CHECK_MUTATED_REPOSITORY', 'Repository state changed while named checks ran. Restore or commit the state and restart review.', {
-      before: before.snapshotDigest,
-      after: after.snapshotDigest,
+        signal: execution.signal ?? null,
+        timedOut: Boolean(execution.error?.code === 'ETIMEDOUT'),
+        errorCode: execution.error?.code ?? null,
+        stdoutBytes: Buffer.byteLength(stdout, 'utf8'),
+        stderrBytes: Buffer.byteLength(stderr, 'utf8'),
+        stdoutDigest: sha256(stdout),
+        stderrDigest: sha256(stderr),
+      };
+      return {
+        id: evidenceId,
+        kind: definition.kind,
+        locator: `named-check:${definition.id}`,
+        observedAt: startedAt,
+        digest: sha256(observation),
+        producerRunId: reviewerRunId,
+        trust: 'deterministic',
+        result: {
+          exitCode,
+          summary: exitCode === 0 ? 'Named check passed.' : `Named check failed${observation.timedOut ? ' by timeout' : ''}.`,
+        },
+        receipt: receipt({
+          snapshotDigest: before.snapshotDigest,
+          evidenceId,
+          observation,
+          supportsClaimIds,
+          supportsCriterionIds,
+        }),
+      };
     });
+
+    const after = createRepositorySnapshot({ repositoryPath: root, baseRef });
+    if (after.snapshotDigest !== before.snapshotDigest) {
+      throw new TaskProofError('CHECK_MUTATED_REPOSITORY', 'Repository state changed while named checks ran. Restore or commit the state and restart review.', {
+        before: before.snapshotDigest,
+        after: after.snapshotDigest,
+      });
+    }
+    return { snapshot: before, evidence };
+  } finally {
+    rmSync(isolatedHome, { recursive: true, force: true });
   }
-  return { snapshot: before, evidence };
 }
