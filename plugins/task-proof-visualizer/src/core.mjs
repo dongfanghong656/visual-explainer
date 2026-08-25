@@ -29,6 +29,7 @@ export const EVIDENCE_TRUST = new Set(['primary', 'secondary', 'self_report']);
 const IMPLEMENTATION_EVIDENCE = new Set(['commit', 'diff', 'file', 'artifact']);
 const VERIFICATION_EVIDENCE = new Set(['test', 'build', 'runtime', 'review', 'trace']);
 const BEHAVIOR_CATEGORIES = new Set(['code', 'behavior', 'config', 'data', 'migration', 'security']);
+const REVIEW_DISPOSITIONS = new Set(['accepted', 'partial', 'rejected', 'unverified']);
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -71,7 +72,7 @@ export function digestManifest(manifest) {
   return createHash('sha256').update(stableStringify(manifest)).digest('hex');
 }
 
-function evaluateClaim(claim, evidenceById, acceptanceById, errors, warnings) {
+function evaluateClaim(claim, mode, evidenceById, acceptanceById, errors, warnings) {
   const id = stringValue(claim?.id) || '<unknown-claim>';
   const status = stringValue(claim?.claimStatus);
   const category = stringValue(claim?.category) || 'code';
@@ -138,7 +139,6 @@ function evaluateClaim(claim, evidenceById, acceptanceById, errors, warnings) {
     }
 
     if (blockers.length) reasons.push('done claim still declares an unresolved blocker');
-
     verdict = reasons.length ? 'unverified' : 'verified';
   }
 
@@ -147,8 +147,20 @@ function evaluateClaim(claim, evidenceById, acceptanceById, errors, warnings) {
   }
 
   const reviewerDisposition = stringValue(claim?.reviewDisposition);
-  if (reviewerDisposition && !['accepted', 'partial', 'rejected', 'unverified'].includes(reviewerDisposition)) {
+  if (reviewerDisposition && !REVIEW_DISPOSITIONS.has(reviewerDisposition)) {
     errors.push(`claim ${id} has unsupported reviewDisposition: ${reviewerDisposition}`);
+  }
+  if (mode === 'producer' && reviewerDisposition) {
+    errors.push(`producer claim ${id} must not set reviewDisposition`);
+  }
+  if (mode === 'reviewer' && !reviewerDisposition) {
+    errors.push(`reviewer claim ${id} requires reviewDisposition`);
+  }
+  if (mode === 'reviewer' && reviewerDisposition === 'accepted' && verdict !== 'verified') {
+    errors.push(`reviewer claim ${id} cannot be accepted because its evidence verdict is ${verdict}`);
+  }
+  if (mode === 'reviewer' && reviewerDisposition === 'rejected' && verdict !== 'contradicted') {
+    errors.push(`reviewer claim ${id} cannot be rejected without contradictory evidence`);
   }
 
   return {
@@ -236,12 +248,25 @@ export function validateManifest(input) {
       errors.push(`acceptance ${id || '<unknown>'} has unsupported status: ${item.status || '<empty>'}`);
     }
     if (!stringValue(item.text)) errors.push(`acceptance ${id || '<unknown>'} requires text`);
+    const refs = asArray(item.evidenceRefs).filter((value) => typeof value === 'string');
+    const resolved = [];
+    for (const ref of refs) {
+      const evidenceItem = evidenceById.get(ref);
+      if (!evidenceItem) errors.push(`acceptance ${id || '<unknown>'} references missing evidence: ${ref}`);
+      else resolved.push(evidenceItem);
+    }
+    if (item.status === 'pass' && refs.length === 0) {
+      errors.push(`acceptance ${id || '<unknown>'} is pass but cites no evidence`);
+    }
+    if (item.status === 'pass' && resolved.some((evidenceItem) => evidenceItem.result === 'fail')) {
+      errors.push(`acceptance ${id || '<unknown>'} is pass but cites failed evidence`);
+    }
     if (id) acceptanceById.set(id, item);
   }
 
   if (!claims.length) errors.push('manifest must contain at least one claim');
   const evaluatedClaims = claims.map((claim) =>
-    evaluateClaim(claim, evidenceById, acceptanceById, errors, warnings),
+    evaluateClaim(claim, input.mode, evidenceById, acceptanceById, errors, warnings),
   );
 
   const verdictCounts = evaluatedClaims.reduce((accumulator, claim) => {
@@ -282,20 +307,30 @@ export function validateManifest(input) {
 }
 
 function reviewerVerdict(claim) {
-  if (claim.reviewerDisposition) {
-    return {
-      accepted: 'verified',
-      partial: 'partially_verified',
-      rejected: 'contradicted',
-      unverified: 'unverified',
-    }[claim.reviewerDisposition];
-  }
+  if (claim.reviewerDisposition === 'partial') return 'partially_verified';
+  if (claim.reviewerDisposition === 'unverified') return 'unverified';
   return claim.verdict;
+}
+
+function checkpointIdentity(manifest) {
+  return {
+    repository: stringValue(manifest?.project?.repository),
+    branch: stringValue(manifest?.project?.branch),
+    base: stringValue(manifest?.project?.base),
+    head: stringValue(manifest?.project?.head),
+    taskId: stringValue(manifest?.task?.id),
+  };
 }
 
 export function compareManifests(producerManifest, reviewerManifest) {
   const producerValidation = validateManifest(producerManifest);
   const reviewerValidation = validateManifest(reviewerManifest);
+  const producerIdentity = checkpointIdentity(producerManifest);
+  const reviewerIdentity = checkpointIdentity(reviewerManifest);
+  const checkpointMismatches = Object.keys(producerIdentity)
+    .filter((key) => producerIdentity[key] !== reviewerIdentity[key])
+    .map((key) => ({ field: key, producer: producerIdentity[key], reviewer: reviewerIdentity[key] }));
+
   const producerClaims = new Map(producerValidation.claims.map((claim) => [claim.id, claim]));
   const reviewerClaims = new Map(reviewerValidation.claims.map((claim) => [claim.id, claim]));
   const ids = [...new Set([...producerClaims.keys(), ...reviewerClaims.keys()])].sort();
@@ -303,12 +338,8 @@ export function compareManifests(producerManifest, reviewerManifest) {
   const comparisons = ids.map((id) => {
     const producer = producerClaims.get(id) || null;
     const reviewer = reviewerClaims.get(id) || null;
-    if (!producer) {
-      return { id, outcome: 'reviewer_only', producer: null, reviewer };
-    }
-    if (!reviewer) {
-      return { id, outcome: 'not_reviewed', producer, reviewer: null };
-    }
+    if (!producer) return { id, outcome: 'reviewer_only', producer: null, reviewer };
+    if (!reviewer) return { id, outcome: 'not_reviewed', producer, reviewer: null };
     const reviewedVerdict = reviewerVerdict(reviewer);
     let outcome = 'disputed';
     if (producer.verdict === reviewedVerdict) outcome = 'agreed';
@@ -322,19 +353,27 @@ export function compareManifests(producerManifest, reviewerManifest) {
     return accumulator;
   }, {});
 
+  const manifestsValid = producerValidation.valid && reviewerValidation.valid;
   const cleanAgreement =
-    producerValidation.valid &&
-    reviewerValidation.valid &&
+    manifestsValid &&
+    checkpointMismatches.length === 0 &&
     comparisons.length > 0 &&
     comparisons.every((item) => item.outcome === 'agreed');
 
+  let overall = 'incomplete_review';
+  if (checkpointMismatches.length) overall = 'checkpoint_mismatch';
+  else if (cleanAgreement) overall = 'agreed';
+  else if (comparisons.some((item) => ['downgraded', 'disputed'].includes(item.outcome))) overall = 'disputed';
+
   return {
-    valid: producerValidation.valid && reviewerValidation.valid,
+    valid: manifestsValid && checkpointMismatches.length === 0,
+    checkpointMatch: checkpointMismatches.length === 0,
+    checkpointMismatches,
     producerValidation,
     reviewerValidation,
     producerDigest: producerValidation.digest,
     reviewerDigest: reviewerValidation.digest,
-    overall: cleanAgreement ? 'agreed' : comparisons.some((item) => ['downgraded', 'disputed'].includes(item.outcome)) ? 'disputed' : 'incomplete_review',
+    overall,
     comparisons,
     counts,
   };
