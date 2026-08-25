@@ -1,0 +1,80 @@
+name: Task Proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/task-proof.yml'
+      - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/commands/task-proof*.md'
+      - 'docs/task-proof/**'
+  push:
+    branches:
+      - main
+      - 'chat/task-proof-*'
+      - 'stage/task-proof-*'
+    paths:
+      - '.github/workflows/task-proof.yml'
+      - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/commands/task-proof*.md'
+      - 'docs/task-proof/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task-proof-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol-and-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax check
+        run: |
+          node --check plugins/visual-explainer/task-proof/core.mjs
+          node --check plugins/visual-explainer/task-proof/mcp-server.mjs
+      - name: Parse JSON schemas and examples
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          for (const filename of [
+            'plugins/visual-explainer/task-proof/task-proof.schema.json',
+            'plugins/visual-explainer/task-proof/examples/scroll-restoration.review.json'
+          ]) {
+            if (fs.existsSync(filename)) JSON.parse(fs.readFileSync(filename, 'utf8'));
+          }
+          NODE
+      - name: Core and adversarial tests
+        run: node --test plugins/visual-explainer/task-proof/*.test.mjs
+
+  mcp-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install declared dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Import MCP server and verify tool contract
+        run: |
+          node --input-type=module - <<'NODE'
+          const module = await import('./plugins/visual-explainer/task-proof/mcp-server.mjs');
+          const names = module.TOOL_DEFINITIONS.map((tool) => tool.name);
+          for (const expected of [
+            'task_proof_snapshot',
+            'task_proof_probe',
+            'task_proof_claim',
+            'task_proof_validate_claim',
+            'task_proof_review'
+          ]) {
+            if (!names.includes(expected)) throw new Error(`Missing MCP tool: ${expected}`);
+          }
+          if (new Set(names).size !== names.length) throw new Error('Duplicate MCP tool name');
+          NODE
