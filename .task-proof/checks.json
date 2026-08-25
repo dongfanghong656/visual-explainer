@@ -5,8 +5,7 @@
       "id": "task-proof-tests",
       "command": "node",
       "args": [
-        "--test",
-        "plugins/visual-explainer/task-proof/*.test.mjs"
+        "plugins/visual-explainer/task-proof/run-all-tests.mjs"
       ],
       "cwd": ".",
       "timeoutMs": 300000,
