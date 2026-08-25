@@ -3,6 +3,7 @@
   "checks": [
     {
       "id": "task-proof-tests",
+      "kind": "test",
       "command": "node",
       "args": [
         "plugins/visual-explainer/task-proof/run-all-tests.mjs"
@@ -13,6 +14,7 @@
     },
     {
       "id": "task-proof-mcp-contract",
+      "kind": "test",
       "command": "node",
       "args": [
         "plugins/visual-explainer/task-proof/mcp-contract.mjs"

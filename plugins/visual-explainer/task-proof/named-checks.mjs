@@ -19,6 +19,8 @@ const MAX_ARGS = 128;
 const MAX_ARG_CHARS = 8192;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const CHECK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const CHECK_KINDS = new Set(['test', 'build']);
+const REQUEST_FIELDS = new Set(['id', 'checkId', 'supportsClaimIds', 'supportsCriterionIds']);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -100,6 +102,9 @@ function normalizeDefinition(raw, root) {
   if (!isRecord(raw) || typeof raw.id !== 'string' || !CHECK_ID_RE.test(raw.id)) {
     throw new TaskProofError('CHECK_ID', 'Every named check requires a safe id.');
   }
+  if (!CHECK_KINDS.has(raw.kind)) {
+    throw new TaskProofError('CHECK_KIND', `Named check ${raw.id} must declare kind test or build in the repository policy.`);
+  }
   if (!Array.isArray(raw.args) || raw.args.length > MAX_ARGS || raw.args.some((arg) => typeof arg !== 'string' || arg.includes('\0') || arg.length > MAX_ARG_CHARS)) {
     throw new TaskProofError('CHECK_ARGS', `Named check ${raw.id} has invalid or excessive arguments.`);
   }
@@ -110,6 +115,7 @@ function normalizeDefinition(raw, root) {
   const executable = resolveExecutable(raw.command);
   return {
     id: raw.id,
+    kind: raw.kind,
     ...executable,
     args: [...raw.args],
     cwd: physicalCwd,
@@ -155,6 +161,10 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
   const seenEvidenceIds = new Set();
   const evidence = requests.map((request, index) => {
     if (!isRecord(request)) throw new TaskProofError('CHECK_REQUEST', `Check request ${index} must be an object.`);
+    const unknownFields = Object.keys(request).filter((key) => !REQUEST_FIELDS.has(key));
+    if (unknownFields.length > 0) {
+      throw new TaskProofError('CHECK_REQUEST_FIELD', `Check request ${index} contains caller-controlled fields: ${unknownFields.join(', ')}.`);
+    }
     const evidenceId = ensureId(request.id, `check request ${index}`);
     if (seenEvidenceIds.has(evidenceId)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate check evidence id: ${evidenceId}`);
     seenEvidenceIds.add(evidenceId);
@@ -192,6 +202,7 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
       policyPath: POLICY_PATH,
       policyDigest,
       checkId: definition.id,
+      evidenceKind: definition.kind,
       command: definition.label,
       runtime: definition.runtime,
       executablePathDigest: sha256(definition.executable),
@@ -210,7 +221,7 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
     };
     return {
       id: evidenceId,
-      kind: request.kind === 'build' ? 'build' : 'test',
+      kind: definition.kind,
       locator: `named-check:${definition.id}`,
       observedAt: startedAt,
       digest: sha256(observation),
