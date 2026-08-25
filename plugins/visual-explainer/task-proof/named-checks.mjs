@@ -77,12 +77,28 @@ function loadPolicy(root) {
   return { policy, digest: sha256(bytes) };
 }
 
+function resolveExecutable(command) {
+  if (command === 'node') {
+    return { executable: realpathSync(process.execPath), label: 'node', runtime: process.version };
+  }
+  if (typeof command !== 'string' || command.trim() === '' || command.startsWith('-') || /[\0\r\n]/.test(command)) {
+    throw new TaskProofError('CHECK_COMMAND', 'Named-check executable is unsafe.');
+  }
+  if (!path.isAbsolute(command)) {
+    throw new TaskProofError('CHECK_COMMAND_RELATIVE', `Named-check executable must be "node" or an absolute path: ${command}`);
+  }
+  let stat;
+  try { stat = lstatSync(command); }
+  catch { throw new TaskProofError('CHECK_COMMAND_MISSING', `Named-check executable does not exist: ${command}`); }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new TaskProofError('CHECK_COMMAND_FILE', `Named-check executable must be a regular non-symlink file: ${command}`);
+  }
+  return { executable: realpathSync(command), label: path.basename(command), runtime: null };
+}
+
 function normalizeDefinition(raw, root) {
   if (!isRecord(raw) || typeof raw.id !== 'string' || !CHECK_ID_RE.test(raw.id)) {
     throw new TaskProofError('CHECK_ID', 'Every named check requires a safe id.');
-  }
-  if (typeof raw.command !== 'string' || raw.command.trim() === '' || raw.command.startsWith('-') || /[\0\r\n]/.test(raw.command)) {
-    throw new TaskProofError('CHECK_COMMAND', `Named check ${raw.id} has an unsafe executable.`);
   }
   if (!Array.isArray(raw.args) || raw.args.length > MAX_ARGS || raw.args.some((arg) => typeof arg !== 'string' || arg.includes('\0') || arg.length > MAX_ARG_CHARS)) {
     throw new TaskProofError('CHECK_ARGS', `Named check ${raw.id} has invalid or excessive arguments.`);
@@ -91,9 +107,10 @@ function normalizeDefinition(raw, root) {
   if (!isInside(root, lexicalCwd)) throw new TaskProofError('CHECK_CWD_ESCAPE', `Named check ${raw.id} cwd escapes the repository.`);
   const physicalCwd = realpathSync(lexicalCwd);
   if (!isInside(root, physicalCwd)) throw new TaskProofError('CHECK_CWD_ESCAPE', `Named check ${raw.id} cwd physically escapes the repository.`);
+  const executable = resolveExecutable(raw.command);
   return {
     id: raw.id,
-    command: raw.command,
+    ...executable,
     args: [...raw.args],
     cwd: physicalCwd,
     timeoutMs: Math.min(Math.max(Number(raw.timeoutMs) || 120_000, 1_000), 600_000),
@@ -151,7 +168,7 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
 
     const startedAt = new Date().toISOString();
     const started = Date.now();
-    const execution = spawnSync(definition.command, definition.args, {
+    const execution = spawnSync(definition.executable, definition.args, {
       cwd: definition.cwd,
       encoding: 'utf8',
       shell: false,
@@ -175,7 +192,9 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
       policyPath: POLICY_PATH,
       policyDigest,
       checkId: definition.id,
-      command: definition.command,
+      command: definition.label,
+      runtime: definition.runtime,
+      executablePathDigest: sha256(definition.executable),
       args: definition.args,
       cwd: path.relative(root, definition.cwd).split(path.sep).join('/') || '.',
       startedAt,
