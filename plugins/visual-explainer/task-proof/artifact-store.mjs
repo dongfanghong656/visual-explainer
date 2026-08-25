@@ -104,9 +104,8 @@ function ensureDirectoryChain(root, segments) {
       }
     }
     const stat = lstatSync(next);
-    if (stat.isSymbolicLink() || !stat.isDirectory()) {
-      throw new TaskProofError('OUTPUT_COLLISION', `Artifact output component is not a regular directory: ${segment}`);
-    }
+    if (stat.isSymbolicLink()) throw new TaskProofError('OUTPUT_ESCAPE', `Artifact output component is a symbolic link: ${segment}`);
+    if (!stat.isDirectory()) throw new TaskProofError('OUTPUT_COLLISION', `Artifact output component is not a directory: ${segment}`);
     current = realpathSync(next);
     if (!isInside(root, current)) throw new TaskProofError('OUTPUT_ESCAPE', 'Artifact output physically escapes the repository.');
   }
