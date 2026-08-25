@@ -20,7 +20,7 @@ const MAX_ARG_CHARS = 8192;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const CHECK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const CHECK_KINDS = new Set(['test', 'build']);
-const REQUEST_FIELDS = new Set(['id', 'checkId', 'supportsClaimIds', 'supportsCriterionIds']);
+const REQUEST_FIELDS = new Set(['id', 'checkId', 'kind', 'supportsClaimIds', 'supportsCriterionIds']);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -102,8 +102,9 @@ function normalizeDefinition(raw, root) {
   if (!isRecord(raw) || typeof raw.id !== 'string' || !CHECK_ID_RE.test(raw.id)) {
     throw new TaskProofError('CHECK_ID', 'Every named check requires a safe id.');
   }
-  if (!CHECK_KINDS.has(raw.kind)) {
-    throw new TaskProofError('CHECK_KIND', `Named check ${raw.id} must declare kind test or build in the repository policy.`);
+  const kind = raw.kind ?? 'test';
+  if (!CHECK_KINDS.has(kind)) {
+    throw new TaskProofError('CHECK_KIND', `Named check ${raw.id} must declare kind test or build.`);
   }
   if (!Array.isArray(raw.args) || raw.args.length > MAX_ARGS || raw.args.some((arg) => typeof arg !== 'string' || arg.includes('\0') || arg.length > MAX_ARG_CHARS)) {
     throw new TaskProofError('CHECK_ARGS', `Named check ${raw.id} has invalid or excessive arguments.`);
@@ -115,7 +116,7 @@ function normalizeDefinition(raw, root) {
   const executable = resolveExecutable(raw.command);
   return {
     id: raw.id,
-    kind: raw.kind,
+    kind,
     ...executable,
     args: [...raw.args],
     cwd: physicalCwd,
@@ -175,6 +176,9 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
     }
     const definition = definitions.get(request.checkId);
     if (!definition) throw new TaskProofError('UNKNOWN_CHECK', `Named check is not allowlisted: ${request.checkId}`);
+    if (request.kind !== undefined && request.kind !== definition.kind) {
+      throw new TaskProofError('CHECK_KIND_MISMATCH', `Caller requested ${request.kind} but policy defines ${definition.kind} for ${definition.id}.`);
+    }
 
     const startedAt = new Date().toISOString();
     const started = Date.now();
