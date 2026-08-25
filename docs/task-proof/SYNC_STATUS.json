@@ -1,0 +1,10 @@
+{
+  "branch": "chat/task-proof-visualizer/v0.1.0-recovery",
+  "localVerification": "PASS",
+  "remoteReadback": "PASS",
+  "sameRunReview": "INCONCLUSIVE",
+  "cleanCi": "PENDING",
+  "independentReview": "PENDING",
+  "draftPr": "PENDING",
+  "release": "NOT_RELEASED"
+}
