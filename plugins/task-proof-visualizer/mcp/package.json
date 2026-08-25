@@ -1,0 +1,21 @@
+{
+  "name": "@task-proof/visualizer-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Evidence-backed task completion claims, review reconciliation, and one-page diagrams for AI agents.",
+  "bin": {
+    "task-proof-mcp": "./server.mjs"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test ../tests/*.test.mjs tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^3.25.0"
+  }
+}

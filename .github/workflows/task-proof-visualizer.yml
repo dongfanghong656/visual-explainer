@@ -1,0 +1,56 @@
+name: task-proof-visualizer
+
+on:
+  push:
+    branches:
+      - "chat/task-proof-visualizer/**"
+      - "stage/task-proof-visualizer/**"
+    paths:
+      - "plugins/task-proof-visualizer/**"
+      - "docs/task-proof-visualizer/**"
+      - ".github/workflows/task-proof-visualizer.yml"
+  pull_request:
+    paths:
+      - "plugins/task-proof-visualizer/**"
+      - "docs/task-proof-visualizer/**"
+      - ".github/workflows/task-proof-visualizer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/task-proof-visualizer/mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Unit and MCP smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.task-proof"
+          npm test 2>&1 | tee "$GITHUB_WORKSPACE/.task-proof/ci-test.log"
+      - name: Generate exact-checkpoint producer proof
+        env:
+          TASK_PROOF_ALLOWED_ROOTS: ${{ github.workspace }}
+          TASK_PROOF_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TASK_PROOF_HEAD_SHA: ${{ github.sha }}
+        run: node ../scripts/generate-ci-proof.mjs
+      - name: Upload task proof bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-proof-node-${{ matrix.node }}-${{ github.sha }}
+          path: .task-proof/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,63 @@
+{
+  "manifestVersion": "1.0",
+  "mode": "producer",
+  "project": {
+    "name": "task-proof-visualizer",
+    "repository": "dongfanghong656/visual-explainer",
+    "branch": "feature/example",
+    "base": "1111111",
+    "head": "2222222"
+  },
+  "task": {
+    "id": "TPV-001",
+    "title": "Reject unsupported completion claims",
+    "objective": "A done behavioral claim is verified only when implementation and verification evidence both pass."
+  },
+  "checkpoint": {
+    "capturedAt": "2026-08-25T00:00:00Z",
+    "actor": "implementation-ai"
+  },
+  "acceptance": [
+    {
+      "id": "AC-1",
+      "text": "A done code claim with primary diff and test evidence validates as verified.",
+      "status": "pass",
+      "evidenceRefs": ["E-DIFF", "E-TEST"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E-DIFF",
+      "type": "diff",
+      "locator": "diff:1111111..2222222",
+      "summary": "Validator rules were added.",
+      "result": "pass",
+      "trust": "primary"
+    },
+    {
+      "id": "E-TEST",
+      "type": "test",
+      "locator": "test-report:node-test.txt#case=valid-code-claim",
+      "summary": "Node test asserts verified verdict for paired evidence.",
+      "result": "pass",
+      "trust": "primary"
+    }
+  ],
+  "claims": [
+    {
+      "id": "CL-1",
+      "title": "Paired evidence gate",
+      "summary": "Done code claims require primary implementation and verification evidence.",
+      "category": "code",
+      "claimStatus": "done",
+      "acceptanceRefs": ["AC-1"],
+      "evidenceRefs": ["E-DIFF", "E-TEST"],
+      "blockers": [],
+      "risks": [],
+      "dependsOn": []
+    }
+  ],
+  "unknowns": [],
+  "risks": [],
+  "nextActions": []
+}

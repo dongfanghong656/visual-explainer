@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "task-review",
+  "reviewId": "REV-scroll-generation-001",
+  "claimId": "CLM-scroll-generation-001",
+  "createdAt": "2026-08-25T04:20:00.000Z",
+  "reviewer": {
+    "name": "review-agent",
+    "role": "reviewer",
+    "runId": "review-run-002"
+  },
+  "reviewedScope": {
+    "branch": "feature/scroll-restoration",
+    "baseRevision": "1111111111111111111111111111111111111111",
+    "headRevision": "2222222222222222222222222222222222222222",
+    "dirty": false,
+    "repository": "https://github.com/example/editor.git"
+  },
+  "evidence": [
+    {
+      "id": "EVD-review-snapshot",
+      "type": "git-snapshot",
+      "summary": "Reviewer MCP recollected the exact clean branch and head revision before acceptance checks.",
+      "locator": "task_proof_git_snapshot workspace=. baseRef=1111111111111111111111111111111111111111",
+      "producer": "mcp",
+      "observedAt": "2026-08-25T04:09:00.000Z",
+      "revision": "2222222222222222222222222222222222222222",
+      "limitations": [
+        "The snapshot proves freshness, not behavior."
+      ],
+      "repository": "https://github.com/example/editor.git",
+      "branch": "feature/scroll-restoration",
+      "baseRevision": "1111111111111111111111111111111111111111",
+      "headRevision": "2222222222222222222222222222222222222222",
+      "dirty": false,
+      "snapshotDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "id": "EVD-review-source",
+      "type": "manual-inspection",
+      "summary": "Reviewer independently traced both frame callbacks, generation guards, and event handlers.",
+      "locator": "src/scroll-controller.ts:42-139",
+      "producer": "reviewer-agent",
+      "observedAt": "2026-08-25T04:10:00.000Z",
+      "revision": "2222222222222222222222222222222222222222",
+      "limitations": [
+        "Static review does not model browser-specific scheduler behavior."
+      ]
+    },
+    {
+      "id": "EVD-review-tests",
+      "type": "test",
+      "summary": "Reviewer reran all scroll-controller regression tests with a clean exit.",
+      "locator": "local run log review-run-002",
+      "producer": "reviewer-agent",
+      "observedAt": "2026-08-25T04:14:00.000Z",
+      "revision": "2222222222222222222222222222222222222222",
+      "command": "npm test -- scroll-controller",
+      "exitCode": 0,
+      "result": "pass",
+      "environment": "node 22, jsdom",
+      "limitations": [
+        "No real-browser run was performed."
+      ]
+    }
+  ],
+  "criterionResults": [
+    {
+      "criterionId": "AC-latest-generation",
+      "verdict": "verified",
+      "rationale": "Both queued callbacks compare the captured generation before writing, and the stale-generation regression passed independently.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "criterionId": "AC-layout-correction",
+      "verdict": "verified",
+      "rationale": "The second frame remeasures after the simulated transaction-induced offset and the regression test passed.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "criterionId": "AC-user-priority",
+      "verdict": "verified",
+      "rationale": "All named user inputs invalidate the run and the independent test observed no subsequent write.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    }
+  ],
+  "claimChecks": [
+    {
+      "id": "CHK-key-change",
+      "subjectId": "EVT-key-change",
+      "label": "The keyed composition establishes a new editor lifetime.",
+      "verdict": "verified",
+      "rationale": "The reviewer traced the content-key boundary and confirmed that the prior editor lifetime ends before fresh references are published.",
+      "evidenceIds": [
+        "EVD-review-source"
+      ]
+    },
+    {
+      "id": "CHK-fresh-refs",
+      "subjectId": "EVT-fresh-refs",
+      "label": "Fresh editor, block, and scroll references start the new run.",
+      "verdict": "verified",
+      "rationale": "The reviewer traced the composition-to-controller handoff and confirmed the new run uses the newly mounted references.",
+      "evidenceIds": [
+        "EVD-review-source"
+      ]
+    },
+    {
+      "id": "CHK-generation",
+      "subjectId": "EVT-generation",
+      "label": "Generation invalidation removes old callbacks' write authority.",
+      "verdict": "verified",
+      "rationale": "The reviewer traced guards in both queued callbacks and reran the stale-generation regression.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-raf-one",
+      "subjectId": "EVT-raf-one",
+      "label": "Frame one performs only the initial anchor restoration.",
+      "verdict": "verified",
+      "rationale": "Source inspection confirms the first callback resolves the anchor and performs the initial bounded write.",
+      "evidenceIds": [
+        "EVD-review-source"
+      ]
+    },
+    {
+      "id": "CHK-layout",
+      "subjectId": "EVT-layout",
+      "label": "The editor transaction can alter layout between frames.",
+      "verdict": "verified",
+      "rationale": "The independent layout fixture introduces the simulated transaction offset between frame one and frame two.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-raf-two",
+      "subjectId": "EVT-raf-two",
+      "label": "The second frame remeasures after layout changes.",
+      "verdict": "verified",
+      "rationale": "Source and the independent layout-shift regression both show a second measurement before correction.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-user-priority",
+      "subjectId": "EVT-user-interrupt",
+      "label": "User intent invalidates queued automatic writes.",
+      "verdict": "verified",
+      "rationale": "The named handlers increment the generation and the independent regression observes no later write.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-current-generation",
+      "subjectId": "INV-current-generation-only",
+      "label": "Only the current generation may retain write authority.",
+      "verdict": "verified",
+      "rationale": "Both queued callbacks compare their captured generation before any write; stale-generation tests pass.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-user-invariant",
+      "subjectId": "INV-user-priority",
+      "label": "User intent permanently wins for the invalidated restoration run.",
+      "verdict": "verified",
+      "rationale": "The reviewer found no path that restores the invalidated generation and the user-priority regression records no later write.",
+      "evidenceIds": [
+        "EVD-review-source",
+        "EVD-review-tests"
+      ]
+    },
+    {
+      "id": "CHK-bounded-termination",
+      "subjectId": "INV-bounded-writes",
+      "label": "A valid restoration run yields control after at most two writes.",
+      "verdict": "verified",
+      "rationale": "No recurring observer or scheduler path remains after the second callback.",
+      "evidenceIds": [
+        "EVD-review-source"
+      ]
+    }
+  ],
+  "discrepancies": [],
+  "residualRisks": [
+    "Acceptance is limited to static inspection and jsdom tests; browser-matrix validation remains outstanding."
+  ],
+  "overallVerdict": "accepted",
+  "correctedCompletion": "verified-complete"
+}
