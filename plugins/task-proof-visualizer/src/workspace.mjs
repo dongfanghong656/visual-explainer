@@ -1,6 +1,15 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { renderBundle } from './render.mjs';
 
@@ -70,18 +79,24 @@ export function collectSnapshot({ workspaceRoot, baseRef, headRef = 'HEAD', evid
   const status = safeGit(root, ['status', '--porcelain=v1', '--untracked-files=all']);
   const recentCommits = safeGit(root, ['log', '-n', '20', '--date=iso-strict', '--pretty=format:%H%x09%ad%x09%an%x09%s']);
   const diffRange = baseRef ? `${baseRef}..${headRef}` : `${headRef}^..${headRef}`;
-  const diffNameStatus = safeGit(root, ['diff', '--name-status', diffRange]);
-  const diffStat = safeGit(root, ['diff', '--stat', diffRange]);
+  const diffNameStatus = baseRef
+    ? safeGit(root, ['diff', '--name-status', diffRange])
+    : safeGit(root, ['show', '--format=', '--name-status', headRef]);
+  const diffStat = baseRef
+    ? safeGit(root, ['diff', '--stat', diffRange])
+    : safeGit(root, ['show', '--format=', '--stat', headRef]);
 
   const files = [];
   for (const requested of evidenceFiles.slice(0, MAX_CAPTURED_FILES)) {
     if (typeof requested !== 'string' || !requested.trim()) continue;
-    const candidate = realpathSync(resolve(root, requested));
-    if (!isInside(root, candidate)) throw new Error(`evidence file escapes workspace: ${requested}`);
+    const lexicalPath = resolve(root, requested);
+    if (!isInside(root, lexicalPath)) throw new Error(`evidence file escapes workspace: ${requested}`);
     try {
+      const candidate = realpathSync(lexicalPath);
+      if (!isInside(root, candidate)) throw new Error('resolved path escapes workspace');
       files.push({ path: relative(root, candidate).replaceAll(sep, '/'), ...hashFile(candidate) });
     } catch (error) {
-      files.push({ path: relative(root, candidate).replaceAll(sep, '/'), error: error.message });
+      files.push({ path: relative(root, lexicalPath).replaceAll(sep, '/'), error: error.message });
     }
   }
 
@@ -110,15 +125,25 @@ export function collectSnapshot({ workspaceRoot, baseRef, headRef = 'HEAD', evid
 
 function safeOutputName(value) {
   const name = typeof value === 'string' && value.trim() ? value.trim() : 'TASK_PROOF';
-  if (!/^[A-Za-z0-9._-]{1,80}$/.test(name)) throw new Error('outputName may contain only A-Z, a-z, 0-9, dot, underscore, and hyphen');
-  return name.replace(/\.(json|md|mmd)$/i, '');
+  if (!/^[A-Za-z0-9._-]{1,80}$/.test(name)) {
+    throw new Error('outputName may contain only A-Z, a-z, 0-9, dot, underscore, and hyphen');
+  }
+  const normalized = name.replace(/\.(json|md|mmd)$/i, '');
+  if (!normalized || normalized === '.' || normalized === '..') throw new Error('outputName is invalid');
+  return normalized;
 }
 
-function atomicWrite(path, content) {
+function atomicCreate(path, content) {
+  if (existsSync(path)) throw new Error(`refusing to overwrite existing proof artifact: ${path}`);
   mkdirSync(dirname(path), { recursive: true });
   const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
-  writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx' });
-  renameSync(temporary, path);
+  try {
+    writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx' });
+    renameSync(temporary, path);
+  } catch (error) {
+    if (existsSync(temporary)) unlinkSync(temporary);
+    throw error;
+  }
 }
 
 export function writeBundle({ workspaceRoot, manifest, outputName, view = 'status' }) {
@@ -132,12 +157,17 @@ export function writeBundle({ workspaceRoot, manifest, outputName, view = 'statu
     mermaid: join(outputDir, `${name}.mmd`),
     validation: join(outputDir, `${name}.validation.json`),
   };
-  atomicWrite(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
-  atomicWrite(paths.markdown, `${bundle.markdown}\n`);
-  atomicWrite(paths.mermaid, `${bundle.mermaid}\n`);
-  atomicWrite(paths.validation, `${JSON.stringify(bundle.validation, null, 2)}\n`);
+  for (const path of Object.values(paths)) {
+    if (existsSync(path)) throw new Error(`refusing to overwrite existing proof artifact: ${path}`);
+  }
+  atomicCreate(paths.manifest, `${JSON.stringify(manifest, null, 2)}\n`);
+  atomicCreate(paths.markdown, `${bundle.markdown}\n`);
+  atomicCreate(paths.mermaid, `${bundle.mermaid}\n`);
+  atomicCreate(paths.validation, `${JSON.stringify(bundle.validation, null, 2)}\n`);
   return {
     validation: bundle.validation,
-    paths: Object.fromEntries(Object.entries(paths).map(([key, path]) => [key, relative(root, path).replaceAll(sep, '/')])),
+    paths: Object.fromEntries(
+      Object.entries(paths).map(([key, path]) => [key, relative(root, path).replaceAll(sep, '/')]),
+    ),
   };
 }
