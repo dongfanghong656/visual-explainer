@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://task-proof.local/schemas/task-proof-1.0.json",
+  "title": "Task Proof Manifest",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "manifestVersion",
+    "mode",
+    "project",
+    "task",
+    "acceptance",
+    "evidence",
+    "claims"
+  ],
+  "properties": {
+    "manifestVersion": {
+      "const": "1.0"
+    },
+    "mode": {
+      "enum": ["producer", "reviewer"]
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "repository": {"type": "string"},
+        "branch": {"type": "string"},
+        "base": {"type": "string"},
+        "head": {"type": "string"}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "title"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "objective": {"type": "string"}
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "capturedAt": {"type": "string"},
+        "actor": {"type": "string"}
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "text", "status"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1},
+          "status": {"enum": ["pass", "fail", "unknown", "not_run"]},
+          "evidenceRefs": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "type", "locator", "summary", "result", "trust"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "type": {
+            "enum": ["commit", "diff", "file", "artifact", "test", "build", "runtime", "review", "requirement", "trace"]
+          },
+          "locator": {"type": "string", "minLength": 1},
+          "summary": {"type": "string", "minLength": 1},
+          "result": {"enum": ["pass", "fail", "unknown", "not_applicable"]},
+          "trust": {"enum": ["primary", "secondary", "self_report"]},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "title", "claimStatus", "acceptanceRefs", "evidenceRefs"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "summary": {"type": "string"},
+          "category": {"type": "string"},
+          "claimStatus": {"enum": ["done", "partial", "not_done", "blocked", "unknown"]},
+          "reviewDisposition": {"enum": ["accepted", "partial", "rejected", "unverified"]},
+          "acceptanceRefs": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "blockers": {"type": "array"},
+          "risks": {"type": "array"},
+          "dependsOn": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "unknowns": {"type": "array"},
+    "risks": {"type": "array"},
+    "nextActions": {"type": "array"},
+    "changeLogic": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "thesis": {"type": "string"},
+        "before": {"type": "array"},
+        "after": {"type": "array"},
+        "interrupts": {"type": "array"},
+        "invariants": {"type": "array"}
+      }
+    }
+  }
+}
