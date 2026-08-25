@@ -39,14 +39,14 @@ Example client configuration:
 
 | Tool | Side effects | Purpose |
 |---|---|---|
-| `task_proof_snapshot` | None | Pin current Git state without raw patches |
+| `task_proof_snapshot` | None | Pin rename-safe Git state and dirty-file content without raw patches |
 | `task_proof_probe` | None | Produce criterion-bound safe observation receipts |
 | `task_proof_run_checks` | Executes named repository checks when explicitly enabled | Produce criterion-bound test/build receipts |
 | `task_proof_validate_claim` | None | Validate and digest a claim |
-| `task_proof_claim` | Writes `.artifacts/task-proof/` | Bind, validate, and render an unverified claim |
-| `task_proof_review` | Observes; may run explicitly enabled named checks; writes artifacts | Resnapshot, enforce criterion coverage, compute the gate, and render the review |
+| `task_proof_claim` | Writes immutable `.artifacts/task-proof/` content | Bind, validate, and render an unverified claim |
+| `task_proof_review` | Observes; may run explicitly enabled named checks; writes immutable artifacts | Resnapshot, enforce criterion coverage, compute the gate, and render the review |
 
-The server never accepts an arbitrary command from the MCP caller.
+The server never accepts an arbitrary command or policy path from the MCP caller.
 
 ## Sequence
 
@@ -55,16 +55,17 @@ claimant agent
   → task_proof_snapshot
   → collect claimant implementation evidence
   → task_proof_claim
-  → UNVERIFIED claim JSON/SVG/HTML/manifest
+  → UNVERIFIED JSON/SVG/HTML/manifest
 
 independent reviewer run
   → reconstruct requirements and acceptance criteria
   → task_proof_snapshot
   → task_proof_probe and/or task_proof_run_checks
+  → verify complete dirty-content fingerprint
   → task_proof_review
   → PASS / PASS_WITH_LIMITS / FAIL / INCONCLUSIVE
 ```
 
-Every probe/check request declares the claim IDs and criterion IDs it supports. `task_proof_review` accepts no free-form review-evidence array; it collects evidence itself, rejects snapshot races, and downgrades uncovered verification requests.
+Every probe/check request declares the claim IDs and criterion IDs it supports. `task_proof_review` accepts no free-form review-evidence array; it collects evidence itself, rejects snapshot races, rejects incomplete dirty snapshots, and downgrades uncovered full or partial verification requests.
 
-A PASS is valid only for the claim digest and reviewed snapshot digest recorded in the review artifact.
+Artifacts are stored under a digest-addressed directory. `LATEST` is only a convenience pointer. A PASS is valid only for the claim digest and reviewed snapshot digest recorded in the review artifact.
