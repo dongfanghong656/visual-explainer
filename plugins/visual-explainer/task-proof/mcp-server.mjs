@@ -8,71 +8,151 @@ import {
   PROTOCOL_VERSION,
   TaskProofError,
   createRepositorySnapshot,
-  finalizeReview,
-  probeRepositoryEvidence,
   validateClaim,
   writeTaskProofArtifacts,
 } from './core.mjs';
+import {
+  finalizeReviewStrict,
+  mergeReviewEvidence,
+  probeRepositoryEvidenceStrict,
+  runNamedChecks,
+} from './hardening.mjs';
+
+const PROBE_SCHEMA = {
+  type: 'object',
+  required: ['id', 'type', 'supportsClaimIds', 'supportsCriterionIds'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    type: { enum: ['file_digest', 'commit_exists', 'changed_path'] },
+    path: { type: 'string' },
+    sha: { type: 'string' },
+    supportsClaimIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+    supportsCriterionIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+  },
+};
+
+const CHECK_REQUEST_SCHEMA = {
+  type: 'object',
+  required: ['id', 'checkId', 'supportsClaimIds', 'supportsCriterionIds'],
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    checkId: { type: 'string' },
+    kind: { enum: ['test', 'build'] },
+    supportsClaimIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+    supportsCriterionIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+  },
+};
 
 export const TOOL_DEFINITIONS = [
   {
     name: 'task_proof_snapshot',
-    description: 'Create a read-only deterministic Git snapshot without raw diffs or arbitrary commands.',
+    description: 'Create a read-only deterministic Git snapshot without raw patches or arbitrary commands.',
     inputSchema: {
-      type: 'object', additionalProperties: false,
-      properties: { repositoryPath: { type: 'string' }, baseRef: { type: 'string' } },
-    },
-  },
-  {
-    name: 'task_proof_probe',
-    description: 'Create reviewer-produced deterministic receipts for safe repository facts. No shell or arbitrary command execution.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['reviewerRunId', 'probes'],
+      type: 'object',
+      additionalProperties: false,
       properties: {
-        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, reviewerRunId: { type: 'string' },
-        probes: {
-          type: 'array', minItems: 1, maxItems: 100,
-          items: {
-            type: 'object', required: ['id', 'type'],
-            properties: {
-              id: { type: 'string' }, type: { enum: ['file_digest', 'commit_exists', 'changed_path'] },
-              path: { type: 'string' }, sha: { type: 'string' },
-            },
-          },
-        },
+        repositoryPath: { type: 'string' },
+        baseRef: { type: 'string' },
       },
     },
   },
   {
-    name: 'task_proof_claim',
-    description: 'Bind a claimant-authored model to current Git state, validate it, and render an explicitly UNVERIFIED claim.',
+    name: 'task_proof_probe',
+    description: 'Create MCP-produced deterministic receipts for allowlisted repository observations. Each receipt must declare the claim and criterion it supports.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['reviewerRunId', 'probes'],
       properties: {
-        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
+        repositoryPath: { type: 'string' },
+        baseRef: { type: 'string' },
+        reviewerRunId: { type: 'string' },
+        probes: { type: 'array', minItems: 1, maxItems: 100, items: PROBE_SCHEMA },
+      },
+    },
+  },
+  {
+    name: 'task_proof_run_checks',
+    description: 'Run repository-defined named checks without a shell. Disabled unless TASK_PROOF_ALLOW_EXECUTION=1; never accepts caller-supplied commands.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['reviewerRunId', 'requests'],
+      properties: {
+        repositoryPath: { type: 'string' },
+        baseRef: { type: 'string' },
+        policyPath: { type: 'string' },
+        reviewerRunId: { type: 'string' },
+        requests: { type: 'array', minItems: 1, maxItems: 20, items: CHECK_REQUEST_SCHEMA },
       },
     },
   },
   {
     name: 'task_proof_validate_claim',
-    description: 'Validate and digest a claim without writing files.',
+    description: 'Validate and digest a claimant artifact without writing files or granting a completion verdict.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim'], properties: { claim: { type: 'object' } },
+      type: 'object',
+      additionalProperties: false,
+      required: ['claim'],
+      properties: { claim: { type: 'object' } },
+    },
+  },
+  {
+    name: 'task_proof_claim',
+    description: 'Bind a claimant model to current Git state, validate it, and render an explicitly UNVERIFIED claim.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['claim'],
+      properties: {
+        repositoryPath: { type: 'string' },
+        baseRef: { type: 'string' },
+        basename: { type: 'string' },
+        claim: { type: 'object' },
+      },
     },
   },
   {
     name: 'task_proof_review',
-    description: 'Resnapshot independently, enforce claimant/reviewer separation, compute the completion gate, and render the review.',
+    description: 'Collect fresh MCP-produced evidence, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render the review.',
     inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim', 'reviewer', 'findings', 'reviewEvidence'],
+      type: 'object',
+      additionalProperties: false,
+      required: ['claim', 'reviewer', 'findings'],
       properties: {
-        repositoryPath: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
+        repositoryPath: { type: 'string' },
+        basename: { type: 'string' },
+        policyPath: { type: 'string' },
+        claim: { type: 'object' },
         reviewer: {
-          type: 'object', required: ['runId', 'role'],
-          properties: { runId: { type: 'string' }, role: { const: 'reviewer' }, agent: { type: 'string' }, model: { type: 'string' } },
+          type: 'object',
+          required: ['runId', 'role'],
+          additionalProperties: false,
+          properties: {
+            runId: { type: 'string' },
+            role: { const: 'reviewer' },
+            agent: { type: 'string' },
+            model: { type: 'string' },
+          },
         },
-        findings: { type: 'array', items: { type: 'object' } },
-        reviewEvidence: { type: 'array', items: { type: 'object' } },
+        findings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['claimId', 'verdict', 'rationale', 'reviewEvidenceIds'],
+            additionalProperties: false,
+            properties: {
+              claimId: { type: 'string' },
+              verdict: { enum: ['verified', 'partially_verified', 'unsupported', 'contradicted', 'stale', 'not_applicable'] },
+              rationale: { type: 'string' },
+              reviewEvidenceIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+            },
+          },
+        },
+        probes: { type: 'array', maxItems: 100, items: PROBE_SCHEMA },
+        checks: { type: 'array', maxItems: 20, items: CHECK_REQUEST_SCHEMA },
       },
     },
   },
@@ -86,24 +166,43 @@ function asObject(value, name) {
 }
 
 function textResult(payload, isError = false) {
-  return { isError, content: [{ type: 'text', text: `${JSON.stringify(payload, null, 2)}\n` }] };
+  return {
+    isError,
+    content: [{ type: 'text', text: `${JSON.stringify(payload, null, 2)}\n` }],
+  };
 }
 
 export async function handleTaskProofTool(name, rawArguments = {}) {
   const args = asObject(rawArguments ?? {}, 'arguments');
+  const repositoryPath = args.repositoryPath ?? process.cwd();
+
   switch (name) {
     case 'task_proof_snapshot':
-      return { snapshot: createRepositorySnapshot({ repositoryPath: args.repositoryPath ?? process.cwd(), baseRef: args.baseRef }) };
+      return { snapshot: createRepositorySnapshot({ repositoryPath, baseRef: args.baseRef }) };
+
     case 'task_proof_probe':
-      return probeRepositoryEvidence({
-        repositoryPath: args.repositoryPath ?? process.cwd(), reviewerRunId: args.reviewerRunId,
-        probes: args.probes, baseRef: args.baseRef,
+      return probeRepositoryEvidenceStrict({
+        repositoryPath,
+        reviewerRunId: args.reviewerRunId,
+        probes: args.probes,
+        baseRef: args.baseRef,
       });
+
+    case 'task_proof_run_checks':
+      return runNamedChecks({
+        repositoryPath,
+        reviewerRunId: args.reviewerRunId,
+        requests: args.requests,
+        baseRef: args.baseRef,
+        policyPath: args.policyPath,
+      });
+
     case 'task_proof_validate_claim':
       return validateClaim(asObject(args.claim, 'claim'));
+
     case 'task_proof_claim': {
       const original = asObject(args.claim, 'claim');
-      const snapshot = createRepositorySnapshot({ repositoryPath: args.repositoryPath ?? process.cwd(), baseRef: args.baseRef });
+      const snapshot = createRepositorySnapshot({ repositoryPath, baseRef: args.baseRef });
       const claim = {
         ...original,
         protocolVersion: PROTOCOL_VERSION,
@@ -121,28 +220,60 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       if (!validation.ok) throw new TaskProofError('INVALID_CLAIM', 'Claim validation failed.', validation);
       claim.artifactDigest = validation.digest;
       const files = writeTaskProofArtifacts({
-        artifact: claim, repositoryPath: args.repositoryPath ?? process.cwd(), basename: args.basename ?? `${claim.task.id}-claim`,
+        artifact: claim,
+        repositoryPath,
+        basename: args.basename ?? `${claim.task.id}-claim`,
       });
       return {
         status: 'UNVERIFIED',
-        rule: 'Claimant output is never proof of completion until task_proof_review returns PASS.',
+        rule: 'Claimant output is never proof of completion. Only task_proof_review may compute a gate.',
         claim,
         files,
       };
     }
+
     case 'task_proof_review': {
       const claim = asObject(args.claim, 'claim');
-      const snapshot = createRepositorySnapshot({ repositoryPath: args.repositoryPath ?? process.cwd(), baseRef: claim.repository?.baseSha });
-      const review = finalizeReview({
-        claim, reviewer: asObject(args.reviewer, 'reviewer'), snapshot,
+      const reviewer = asObject(args.reviewer, 'reviewer');
+      if (reviewer.runId === claim.producer?.runId) {
+        throw new TaskProofError('NOT_INDEPENDENT', 'reviewer.runId must differ from claim.producer.runId.');
+      }
+      const baseRef = claim.repository?.baseSha;
+      const collections = [];
+      if (Array.isArray(args.probes) && args.probes.length > 0) {
+        collections.push(probeRepositoryEvidenceStrict({
+          repositoryPath,
+          reviewerRunId: reviewer.runId,
+          probes: args.probes,
+          baseRef,
+        }));
+      }
+      if (Array.isArray(args.checks) && args.checks.length > 0) {
+        collections.push(runNamedChecks({
+          repositoryPath,
+          reviewerRunId: reviewer.runId,
+          requests: args.checks,
+          baseRef,
+          policyPath: args.policyPath,
+        }));
+      }
+      const collected = mergeReviewEvidence(collections);
+      const snapshot = collected.snapshot ?? createRepositorySnapshot({ repositoryPath, baseRef });
+      const review = finalizeReviewStrict({
+        claim,
+        reviewer,
+        snapshot,
         findings: Array.isArray(args.findings) ? args.findings : [],
-        reviewEvidence: Array.isArray(args.reviewEvidence) ? args.reviewEvidence : [],
+        reviewEvidence: collected.evidence,
       });
       const files = writeTaskProofArtifacts({
-        artifact: review, repositoryPath: args.repositoryPath ?? process.cwd(), basename: args.basename ?? `${claim.task.id}-review`,
+        artifact: review,
+        repositoryPath,
+        basename: args.basename ?? `${claim.task.id}-review`,
       });
       return { gate: review.gate, review, files };
     }
+
     default:
       throw new TaskProofError('UNKNOWN_TOOL', `Unknown Task Proof tool: ${name}`);
   }
