@@ -1,0 +1,63 @@
+{
+  "manifestVersion": "1.0",
+  "mode": "producer",
+  "project": {
+    "name": "example-project",
+    "repository": "owner/repository",
+    "branch": "feature/task",
+    "base": "BASE_COMMIT",
+    "head": "HEAD_COMMIT"
+  },
+  "task": {
+    "id": "TASK-001",
+    "title": "Bounded task title",
+    "objective": "One observable outcome that the task must deliver."
+  },
+  "checkpoint": {
+    "capturedAt": "2026-08-25T00:00:00Z",
+    "actor": "implementation-ai"
+  },
+  "acceptance": [
+    {
+      "id": "AC-1",
+      "text": "A falsifiable acceptance criterion.",
+      "status": "pass",
+      "evidenceRefs": ["E-IMPL", "E-VERIFY"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E-IMPL",
+      "type": "diff",
+      "locator": "diff:BASE_COMMIT..HEAD_COMMIT",
+      "summary": "The bounded implementation change.",
+      "result": "pass",
+      "trust": "primary"
+    },
+    {
+      "id": "E-VERIFY",
+      "type": "test",
+      "locator": "test-report:path/to/report#sha256=DIGEST",
+      "summary": "The test assertion that proves the observable outcome.",
+      "result": "pass",
+      "trust": "primary"
+    }
+  ],
+  "claims": [
+    {
+      "id": "CL-1",
+      "title": "Observable claim",
+      "summary": "Under a named condition, the system produces a named result.",
+      "category": "behavior",
+      "claimStatus": "done",
+      "acceptanceRefs": ["AC-1"],
+      "evidenceRefs": ["E-IMPL", "E-VERIFY"],
+      "blockers": [],
+      "risks": [],
+      "dependsOn": []
+    }
+  ],
+  "unknowns": [],
+  "risks": [],
+  "nextActions": []
+}

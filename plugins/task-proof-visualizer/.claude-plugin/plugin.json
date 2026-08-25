@@ -1,0 +1,17 @@
+{
+  "name": "task-proof-visualizer",
+  "version": "0.1.0",
+  "description": "Evidence-backed AI task completion diagrams with independent reviewer reconciliation.",
+  "author": {
+    "name": "dongfanghong656"
+  },
+  "license": "MIT",
+  "keywords": [
+    "task-proof",
+    "code-review",
+    "evidence",
+    "mermaid",
+    "mcp",
+    "ai-agents"
+  ]
+}
