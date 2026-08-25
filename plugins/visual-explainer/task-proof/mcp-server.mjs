@@ -15,8 +15,8 @@ import {
   finalizeReviewStrict,
   mergeReviewEvidence,
   probeRepositoryEvidenceStrict,
-  runNamedChecks,
 } from './hardening.mjs';
+import { runNamedChecksStrict } from './named-checks.mjs';
 
 const PROBE_SCHEMA = {
   type: 'object',
@@ -75,7 +75,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'task_proof_run_checks',
-    description: 'Run repository-defined named checks without a shell. Disabled unless TASK_PROOF_ALLOW_EXECUTION=1; never accepts caller-supplied commands.',
+    description: 'Run fixed repository-defined checks from .task-proof/checks.json without a shell. Disabled unless TASK_PROOF_ALLOW_EXECUTION=1; never accepts commands or policy paths from the caller.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -83,7 +83,6 @@ export const TOOL_DEFINITIONS = [
       properties: {
         repositoryPath: { type: 'string' },
         baseRef: { type: 'string' },
-        policyPath: { type: 'string' },
         reviewerRunId: { type: 'string' },
         requests: { type: 'array', minItems: 1, maxItems: 20, items: CHECK_REQUEST_SCHEMA },
       },
@@ -124,7 +123,6 @@ export const TOOL_DEFINITIONS = [
       properties: {
         repositoryPath: { type: 'string' },
         basename: { type: 'string' },
-        policyPath: { type: 'string' },
         claim: { type: 'object' },
         reviewer: {
           type: 'object',
@@ -172,6 +170,15 @@ function textResult(payload, isError = false) {
   };
 }
 
+function assertNoSnapshotRace(reference, fresh) {
+  if (reference.snapshotDigest !== fresh.snapshotDigest) {
+    throw new TaskProofError('SNAPSHOT_RACE', 'Repository changed after evidence collection. Restart the review.', {
+      evidenceSnapshot: reference.snapshotDigest,
+      currentSnapshot: fresh.snapshotDigest,
+    });
+  }
+}
+
 export async function handleTaskProofTool(name, rawArguments = {}) {
   const args = asObject(rawArguments ?? {}, 'arguments');
   const repositoryPath = args.repositoryPath ?? process.cwd();
@@ -189,12 +196,11 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       });
 
     case 'task_proof_run_checks':
-      return runNamedChecks({
+      return runNamedChecksStrict({
         repositoryPath,
         reviewerRunId: args.reviewerRunId,
         requests: args.requests,
         baseRef: args.baseRef,
-        policyPath: args.policyPath,
       });
 
     case 'task_proof_validate_claim':
@@ -249,16 +255,17 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
         }));
       }
       if (Array.isArray(args.checks) && args.checks.length > 0) {
-        collections.push(runNamedChecks({
+        collections.push(runNamedChecksStrict({
           repositoryPath,
           reviewerRunId: reviewer.runId,
           requests: args.checks,
           baseRef,
-          policyPath: args.policyPath,
         }));
       }
       const collected = mergeReviewEvidence(collections);
       const snapshot = collected.snapshot ?? createRepositorySnapshot({ repositoryPath, baseRef });
+      const finalSnapshot = createRepositorySnapshot({ repositoryPath, baseRef });
+      assertNoSnapshotRace(snapshot, finalSnapshot);
       const review = finalizeReviewStrict({
         claim,
         reviewer,
