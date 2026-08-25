@@ -1,71 +1,83 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TOOL_DEFINITIONS } from './mcp-server.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const pluginDir = join(here, "..");
-const rootDir = join(pluginDir, "..", "..");
-const serverSource = readFileSync(join(pluginDir, "mcp", "server.mjs"), "utf8");
+const directory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(directory, '..', '..', '..');
 
-function occurrences(text, needle) {
-  return text.split(needle).length - 1;
+function read(relativePath) {
+  return readFileSync(path.join(repositoryRoot, relativePath), 'utf8');
 }
 
-test("MCP source registers the three preserved visual tools and five Task Proof tools exactly once", () => {
-  const expected = [
-    "visual_explainer_prepare",
-    "visual_explainer_render_html",
-    "visual_explainer_render_quick",
-    "task_proof_git_snapshot",
-    "task_proof_validate_claim",
-    "task_proof_render_claim",
-    "task_proof_validate_review",
-    "task_proof_render_review",
-  ];
-  for (const name of expected) {
-    assert.equal(occurrences(serverSource, `server.registerTool(\"${name}\"`), 1, `${name} registration drifted`);
+function parse(relativePath) {
+  return JSON.parse(read(relativePath));
+}
+
+test('dedicated Task Proof MCP exposes the stable six-tool contract', () => {
+  const names = TOOL_DEFINITIONS.map((tool) => tool.name).sort();
+  assert.deepEqual(names, [
+    'task_proof_claim',
+    'task_proof_probe',
+    'task_proof_review',
+    'task_proof_run_checks',
+    'task_proof_snapshot',
+    'task_proof_validate_claim',
+  ]);
+  for (const tool of TOOL_DEFINITIONS) {
+    assert.equal(tool.inputSchema?.type, 'object');
+    assert.equal(tool.inputSchema?.additionalProperties, false);
   }
 });
 
-test("MCP source exposes both Task Proof prompts and all protocol resources", () => {
-  for (const prompt of ["task-proof.md", "task-proof-review.md"]) {
-    assert.match(serverSource, new RegExp(`\\"${prompt.replaceAll(".", "\\.")}\\"`));
-  }
-  for (const uri of [
-    "visual-explainer://task-proof/PROTOCOL.md",
-    "visual-explainer://task-proof/schema.json",
-    "visual-explainer://task-proof/examples/scroll-restoration.claim.json",
-    "visual-explainer://task-proof/examples/scroll-restoration.review.json",
-  ]) {
-    assert.match(serverSource, new RegExp(uri.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
+test('plugin contains discoverable skill and claimant/reviewer commands', () => {
+  const skill = read('plugins/visual-explainer/skills/task-proof/SKILL.md');
+  const claimCommand = read('plugins/visual-explainer/commands/task-proof.md');
+  const reviewCommand = read('plugins/visual-explainer/commands/task-proof-review.md');
+  assert.match(skill, /Task Proof/i);
+  assert.match(skill, /claimant/i);
+  assert.match(skill, /reviewer/i);
+  assert.match(claimCommand, /UNVERIFIED/i);
+  assert.match(reviewCommand, /independent/i);
 });
 
-test("package and Claude plugin metadata use one alpha version", () => {
-  const packageJson = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf8"));
-  const marketplacePlugin = JSON.parse(readFileSync(join(rootDir, ".claude-plugin", "plugin.json"), "utf8"));
-  const marketplace = JSON.parse(readFileSync(join(rootDir, ".claude-plugin", "marketplace.json"), "utf8"));
-  const plugin = JSON.parse(readFileSync(join(pluginDir, ".claude-plugin", "plugin.json"), "utf8"));
-  const versions = [
-    packageJson.version,
-    marketplacePlugin.version,
-    marketplace.metadata.version,
-    marketplace.plugins[0].version,
-    plugin.version,
-  ];
-  assert.deepEqual(new Set(versions), new Set(["0.11.0-alpha.1"]));
-  assert.match(packageJson.scripts["test:task-proof"], /node --test/);
-  assert.match(packageJson.scripts["check:task-proof"], /npm run test:task-proof/);
+test('repository-owned check policy controls evidence kinds and strict test discovery', () => {
+  const policy = parse('.task-proof/checks.json');
+  assert.equal(policy.version, 1);
+  assert.ok(policy.checks.length >= 2);
+  const tests = policy.checks.find((check) => check.id === 'task-proof-tests');
+  assert.equal(tests.kind, 'test');
+  assert.equal(tests.command, 'node');
+  assert.ok(tests.args.includes('plugins/visual-explainer/task-proof/run-all-tests-strict.mjs'));
+  for (const check of policy.checks) assert.ok(['test', 'build'].includes(check.kind));
 });
 
-test("render handlers persist the authoritative JSON sidecar before the HTML derivative", () => {
-  for (const toolName of ["task_proof_render_claim", "task_proof_render_review"]) {
-    const start = serverSource.indexOf(`server.registerTool(\"${toolName}\"`);
-    assert.notEqual(start, -1);
-    const next = serverSource.indexOf("server.registerTool(", start + 1);
-    const block = serverSource.slice(start, next === -1 ? serverSource.length : next);
-    assert.ok(block.indexOf("writeTaskProofSidecar") < block.indexOf("writeRenderedHtml"), `${toolName} must write JSON first`);
-  }
+test('CI runs the strict test finder and a real MCP stdio handshake', () => {
+  const workflow = read('.github/workflows/task-proof.yml');
+  assert.match(workflow, /run-all-tests-strict\.mjs/);
+  assert.match(workflow, /mcp-handshake\.mjs/);
+  assert.match(workflow, /npm install --ignore-scripts/);
+});
+
+test('protocol documents state the core trust boundaries', () => {
+  const standard = read('plugins/visual-explainer/task-proof/STANDARD_V0.2.md');
+  const security = read('plugins/visual-explainer/task-proof/SECURITY_V0.2.md');
+  const mcp = read('plugins/visual-explainer/task-proof/MCP_V0.2.md');
+  assert.match(standard, /claimant output.*never|claimant.*no.*gate/is);
+  assert.match(standard, /working-tree.*content|dirty-file.*content/is);
+  assert.match(standard, /requiredEvidenceLocators/);
+  assert.match(security, /repository code/i);
+  assert.match(security, /residual risks/i);
+  assert.match(mcp, /task_proof_review/);
+  assert.match(mcp, /arbitrary command/i);
+});
+
+test('package declares the MCP SDK used by the dedicated server', () => {
+  const packageJson = parse('package.json');
+  const version = packageJson.dependencies?.['@modelcontextprotocol/sdk']
+    ?? packageJson.devDependencies?.['@modelcontextprotocol/sdk'];
+  assert.equal(typeof version, 'string');
+  assert.ok(version.length > 0);
 });
