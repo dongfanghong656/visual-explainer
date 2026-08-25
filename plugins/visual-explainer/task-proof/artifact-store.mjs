@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -36,6 +37,7 @@ const GATE_STATUSES = new Set(['PASS', 'PASS_WITH_LIMITS', 'FAIL', 'INCONCLUSIVE
 const MAX_ARTIFACT_BYTES = 4 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_STORED_FILE_BYTES = 8 * 1024 * 1024;
+const EXPECTED_ARTIFACT_FILES = new Set(['artifact.json', 'diagram.svg', 'index.html', 'manifest.json']);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -122,6 +124,18 @@ function writeDurable(filename, content) {
   }
 }
 
+function fsyncDirectory(directory) {
+  let descriptor;
+  try {
+    descriptor = openSync(directory, 'r');
+    fsyncSync(descriptor);
+  } catch {
+    // Directory fsync is unavailable on some platforms; file fsync and rename still apply.
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
 function atomicPointer(filename, content) {
   const temporary = `${filename}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
@@ -143,6 +157,7 @@ function atomicPointer(filename, content) {
       throw replacementError;
     }
   }
+  fsyncDirectory(path.dirname(filename));
 }
 
 function setEquals(actual, expected) {
@@ -160,6 +175,7 @@ export function validateReviewArtifact(review) {
   if (!SHA_RE.test(review.repository?.baseSha ?? '')) errors.push({ code: 'BASE_SHA', message: 'Review requires a full base SHA.' });
   if (!SHA_RE.test(review.repository?.headSha ?? '')) errors.push({ code: 'HEAD_SHA', message: 'Review requires a full head SHA.' });
   if (!DIGEST_RE.test(review.repository?.snapshotDigest ?? '')) errors.push({ code: 'SNAPSHOT_DIGEST', message: 'Review requires a snapshot digest.' });
+  if (review.repository?.workingTreeFingerprintComplete === false) errors.push({ code: 'INCOMPLETE_SNAPSHOT', message: 'Review cannot be stored as a completion gate for an incompletely fingerprinted working tree.' });
   if (!DIGEST_RE.test(review.claimDigest ?? '')) errors.push({ code: 'CLAIM_DIGEST', message: 'Review requires a claim digest.' });
   if (!GATE_STATUSES.has(review.gate?.status)) errors.push({ code: 'GATE_STATUS', message: 'Review has an invalid gate status.' });
   if (!isRecord(review.reviewer) || typeof review.reviewer.runId !== 'string' || review.reviewer.role !== 'reviewer') {
@@ -279,26 +295,39 @@ export function validateTaskProofArtifact(artifact) {
 }
 
 function verifyExisting(finalDirectory, expectedManifest, outputRoot) {
-  const physicalDirectory = realpathSync(finalDirectory);
-  if (!isInside(outputRoot, physicalDirectory)) throw new TaskProofError('OUTPUT_ESCAPE', 'Existing artifact directory escapes confinement.');
   const directoryStat = lstatSync(finalDirectory);
   if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) throw new TaskProofError('OUTPUT_COLLISION', 'Existing artifact path is not a regular directory.');
+  const physicalDirectory = realpathSync(finalDirectory);
+  if (!isInside(outputRoot, physicalDirectory)) throw new TaskProofError('OUTPUT_ESCAPE', 'Existing artifact directory escapes confinement.');
+  const actualNames = new Set(readdirSync(finalDirectory));
+  if (!setEquals(actualNames, EXPECTED_ARTIFACT_FILES)) {
+    throw new TaskProofError('OUTPUT_TAMPERED', 'Immutable artifact directory contains missing or unmanifested files.', {
+      actual: [...actualNames].sort(),
+      expected: [...EXPECTED_ARTIFACT_FILES].sort(),
+    });
+  }
   const manifestPath = path.join(finalDirectory, 'manifest.json');
-  if (!existsSync(manifestPath)) throw new TaskProofError('OUTPUT_INCOMPLETE', 'Existing immutable artifact directory has no manifest.');
   const manifestStat = lstatSync(manifestPath);
   if (manifestStat.isSymbolicLink() || !manifestStat.isFile() || manifestStat.size > MAX_MANIFEST_BYTES) {
     throw new TaskProofError('OUTPUT_TAMPERED', 'Existing artifact manifest is unsafe or oversized.');
   }
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch (error) {
+    throw new TaskProofError('OUTPUT_TAMPERED', `Existing artifact manifest is not valid JSON: ${error.message}`);
+  }
   if (manifest.manifestDigest !== semanticManifestDigest(manifest)) throw new TaskProofError('OUTPUT_TAMPERED', 'Existing artifact manifest digest is invalid.');
   if (manifest.manifestDigest !== expectedManifest.manifestDigest) throw new TaskProofError('OUTPUT_COLLISION', 'Existing artifact directory has different content.');
+  if (!setEquals(Object.keys(manifest.files ?? {}), Object.keys(expectedManifest.files))) {
+    throw new TaskProofError('OUTPUT_TAMPERED', 'Stored manifest has missing or unexpected file entries.');
+  }
   for (const [key, expected] of Object.entries(expectedManifest.files)) {
     const stored = manifest.files?.[key];
     if (!stored || stored.path !== expected.path || stored.digest !== expected.digest || stored.sizeBytes !== expected.sizeBytes) {
       throw new TaskProofError('OUTPUT_TAMPERED', `Stored manifest entry differs for ${key}.`);
     }
     const filename = path.join(finalDirectory, path.basename(expected.path));
-    if (!existsSync(filename)) throw new TaskProofError('OUTPUT_INCOMPLETE', `Missing immutable artifact file: ${expected.path}`);
     const stat = lstatSync(filename);
     if (stat.isSymbolicLink() || !stat.isFile() || stat.size !== expected.sizeBytes || stat.size > MAX_STORED_FILE_BYTES) {
       throw new TaskProofError('OUTPUT_TAMPERED', `Artifact file is unsafe or has the wrong size: ${expected.path}`);
@@ -353,7 +382,15 @@ export function writeTaskProofArtifactsStrict({ artifact, repositoryPath = '.', 
     try {
       for (const payload of Object.values(payloads)) writeDurable(path.join(temporary, payload.filename), payload.content);
       writeDurable(path.join(temporary, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-      renameSync(temporary, finalDirectory);
+      fsyncDirectory(temporary);
+      try {
+        renameSync(temporary, finalDirectory);
+      } catch (error) {
+        if (!['EEXIST', 'ENOTEMPTY'].includes(error?.code) || !existsSync(finalDirectory)) throw error;
+        rmSync(temporary, { recursive: true, force: true });
+        verifyExisting(finalDirectory, manifest, outputRoot);
+      }
+      fsyncDirectory(stemDirectory);
     } catch (error) {
       rmSync(temporary, { recursive: true, force: true });
       throw error;
