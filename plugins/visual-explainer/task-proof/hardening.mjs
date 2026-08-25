@@ -3,11 +3,13 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import {
   TaskProofError,
-  createRepositorySnapshot,
   finalizeReview,
   sha256,
-  validateSnapshot,
 } from './core.mjs';
+import {
+  createRepositorySnapshotStrict as createRepositorySnapshot,
+  validateRepositorySnapshotStrict as validateSnapshot,
+} from './snapshot.mjs';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_GIT_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -116,8 +118,7 @@ export function validateClaimEvidencePolicy(claim) {
   const criteria = claim?.task?.acceptanceCriteria;
   if (!Array.isArray(criteria)) return { ok: true, errors };
   for (const [index, criterion] of criteria.entries()) {
-    if (!isRecord(criterion)) continue;
-    if (criterion.requiredEvidenceKinds === undefined) continue;
+    if (!isRecord(criterion) || criterion.requiredEvidenceKinds === undefined) continue;
     if (!Array.isArray(criterion.requiredEvidenceKinds) || criterion.requiredEvidenceKinds.length === 0) {
       errors.push({ code: 'REQUIRED_EVIDENCE_KINDS', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: 'requiredEvidenceKinds must be a non-empty array when present.' });
       continue;
