@@ -5,7 +5,7 @@ Task Proof separates two statements:
 1. **Claim:** an implementing agent declares what it believes it changed.
 2. **Review:** a different run independently reconstructs the contract, collects fresh evidence, and computes the only authoritative completion gate.
 
-The diagram is a view of digest-bound JSON. It is never the fact source by itself.
+Claimant output is never a completion gate. The diagram is a view of digest-bound JSON; it is never the fact source by itself.
 
 ## 1. Roles and authority
 
@@ -32,7 +32,7 @@ Wall-clock observation time and raw patches are excluded. Changing a dirty file 
 
 Untracked files are enumerated individually. Working-tree content hashing is bounded. A directory, dirty submodule, unsupported filesystem object, excessive file count, or excessive byte budget makes the snapshot incomplete or aborts snapshot creation. `task_proof_review` MUST NOT issue a completion gate from an incomplete snapshot.
 
-A review recreates the snapshot before and after evidence collection. Head or snapshot mismatch makes declared completion stale. A repository race aborts the review.
+Every read-only probe recreates the snapshot after observation; a mismatch aborts the probe. A review recreates the snapshot after all evidence collection. Head or snapshot mismatch makes declared completion stale, and an in-flight repository race aborts the review.
 
 ## 3. Status vocabulary
 
@@ -72,16 +72,23 @@ Test and build evidence records a structured exit code. A failing check never su
 
 Every declared-done claim references acceptance criteria. A reviewer receipt lists both `supportsClaimIds` and `supportsCriterionIds`; evidence that is merely present but unrelated cannot verify the claim.
 
-An acceptance criterion may set `requiredEvidenceKinds`, for example:
+An acceptance criterion may constrain both evidence type and exact source:
 
-- source or documentation change: `file` or `diffstat`;
-- runtime behavior: `test`;
-- packaging: `build`;
+- `requiredEvidenceKinds`: allowed evidence kinds, such as `diffstat`, `test`, or `build`;
+- `requiredEvidenceLocators`: exact acceptable locators, such as `src/controller.ts` or `named-check:task-proof-tests`.
+
+Examples:
+
+- source or documentation presence/change: `file` or `diffstat`, normally pinned to exact repository paths;
+- runtime behavior: `test`, normally pinned to a repository-owned named check;
+- packaging: `build`, pinned to a policy-owned build check;
 - deployment or hardware acceptance: a future attested `external` receipt.
 
-A `verified` finding is downgraded unless every referenced criterion is covered by at least one successful, digest-valid, reviewer-produced receipt of an allowed kind.
+A `verified` finding is downgraded unless every referenced criterion is covered by at least one successful, digest-valid, reviewer-produced receipt of an allowed kind and, when configured, an allowed locator.
 
-A `partially_verified` finding is downgraded unless at least one referenced criterion is covered. Covered and unresolved criterion IDs must remain explicit. Merely choosing the word “partial” cannot obtain `PASS_WITH_LIMITS`.
+A `partially_verified` finding is downgraded unless at least one referenced criterion is covered. Covered and unresolved criterion IDs remain explicit. Merely choosing the word “partial” cannot obtain `PASS_WITH_LIMITS`.
+
+A path digest or changed-path observation proves only the file fact it records; it does not prove runtime semantics. Behavioral criteria should use a named test or another semantic verifier.
 
 ## 6. Computed gate
 
@@ -103,20 +110,24 @@ Read-only MCP probes are allowlisted:
 - full commit-SHA existence;
 - changed repository path, using NUL-delimited Git output.
 
-They use process argument arrays rather than a shell and reject absolute paths, traversal, NUL bytes, symlinks, parent-symlink physical escapes, oversized files, unsafe refs, and excessive probe counts.
+They use process argument arrays rather than a shell and reject absolute paths, traversal, NUL bytes, symlinks, parent-symlink physical escapes, oversized files, unsafe refs, excessive probe counts, and repository changes during the probe window.
 
-Behavioral checks are repository-owned named checks in `.task-proof/checks.json`. The caller supplies only a check ID and evidence bindings, never a command. Execution:
+Behavioral checks are repository-owned named checks in `.task-proof/checks.json`. The policy owns the evidence kind (`test` or `build`). A legacy entry without `kind` safely defaults to `test`; a caller may not relabel it. The caller supplies only a check ID and evidence bindings, never a command or policy path.
+
+Execution:
 
 - is disabled by default;
 - requires `TASK_PROOF_ALLOW_EXECUTION=1` after operator review;
 - uses `spawnSync(..., shell: false)`;
+- resolves the `node` sentinel directly to `process.execPath`; any other executable must be an absolute regular non-symlink file;
+- hashes executable content before execution and confirms it did not change afterward;
 - confines `cwd` to the repository;
-- limits duration and captured output;
-- uses a minimal environment;
-- records policy, command, argument, output, exit, duration, and snapshot digests;
+- runs with an isolated temporary `HOME`, `USERPROFILE`, temporary directories, Git global configuration, and npm user configuration;
+- limits duration, captured output, arguments, policy size, and executable size;
+- records policy, executable, argument, output, exit, duration, and snapshot digests;
 - rejects repository mutation during the check.
 
-Repository checks still execute repository code. Explicit operator opt-in is a security boundary, not a formality.
+Repository checks still execute repository code. Explicit operator opt-in is a security boundary, not a formality. Prefer an ephemeral container or CI runner.
 
 ## 8. Visual grammar
 
@@ -132,7 +143,7 @@ A Task Proof picture fits a 16:9 one-screen view and includes:
 - an unmistakable `UNVERIFIED` claimant badge or computed review gate;
 - an SVG text alternative.
 
-The view MUST preserve partial, blocked, not-done, stale, unknown, risk, and next-step information rather than showing only successful work.
+The view MUST preserve partial, blocked, not-done, stale, unknown, risk, and next-step information rather than showing only successful work. JSON and manifest remain authoritative when visual compression omits detail.
 
 ## 9. Artifact set
 
@@ -142,14 +153,14 @@ Each render writes an immutable digest-addressed directory:
 .artifacts/task-proof/<safe-stem>/<artifact-digest-hex>/
 ```
 
-It contains:
+It contains exactly:
 
 - `artifact.json`;
 - `diagram.svg`;
 - `index.html`;
 - `manifest.json` with SHA-256 and byte size for every file.
 
-`LATEST` is a mutable convenience pointer, not evidence. Writes use a repository-confined temporary directory followed by rename. Existing immutable directories are rehashed before reuse. Parent and final-component symlinks are rejected before directory creation.
+`LATEST` is a mutable convenience pointer, not evidence. Writes use a repository-confined temporary directory followed by rename and best-effort directory synchronization. Existing immutable directories are rehashed before reuse. Missing, changed, or unmanifested files are rejected. Parent and final-component symlinks are rejected before directory creation.
 
 JSON is the semantic fact source. A screenshot without JSON and manifest is presentation only.
 
@@ -160,3 +171,4 @@ JSON is the semantic fact source. A screenshot without JSON and manifest is pres
 - Unit tests do not prove hardware, user acceptance, deployment, release, or production readiness.
 - Committed, merged, released, deployed, and externally accepted are separate claims with separate evidence.
 - A passing gate is valid only for the exact claim digest and reviewed snapshot digest recorded in the review artifact.
+- Acceptance criteria supplied by an implementing agent may still omit requirements; an independent requirements contract is a planned strengthening and remains a disclosed residual risk in 0.2.0.
