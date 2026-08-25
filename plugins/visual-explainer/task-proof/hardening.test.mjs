@@ -14,9 +14,10 @@ import {
 import {
   finalizeReviewStrict,
   probeRepositoryEvidenceStrict,
-  runNamedChecks,
+  validateClaimEvidencePolicy,
   verifyMcpReceipt,
 } from './hardening.mjs';
+import { runNamedChecksStrict } from './named-checks.mjs';
 
 function git(repo, ...args) {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
@@ -82,7 +83,24 @@ function claim(snapshot) {
   };
 }
 
-test('strict file probe rejects a parent-directory symlink escape', () => {
+function allowlistedPolicy(repo, exitCode = 0) {
+  mkdirSync(path.join(repo, '.task-proof'));
+  writeFileSync(path.join(repo, '.task-proof', 'checks.json'), JSON.stringify({
+    version: 1,
+    checks: [{ id: 'acceptance', command: process.execPath, args: ['-e', `process.exit(${exitCode})`], cwd: '.' }],
+  }));
+}
+
+test('criterion evidence policy rejects unknown or duplicate kinds', () => {
+  const value = claim(createRepositorySnapshot({ repositoryPath: repository() }));
+  value.task.acceptanceCriteria[0].requiredEvidenceKinds = ['diffstat', 'diffstat', 'imaginary'];
+  const result = validateClaimEvidencePolicy(value);
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((item) => item.code === 'DUPLICATE_REQUIRED_EVIDENCE_KIND'));
+  assert.ok(result.errors.some((item) => item.code === 'REQUIRED_EVIDENCE_KIND'));
+});
+
+test('strict file probe rejects parent-directory symlink escape', () => {
   const repo = repository();
   const outside = mkdtempSync(path.join(os.tmpdir(), 'task-proof-outside-'));
   writeFileSync(path.join(outside, 'secret.txt'), 'secret\n');
@@ -92,28 +110,22 @@ test('strict file probe rejects a parent-directory symlink escape', () => {
       repositoryPath: repo,
       reviewerRunId: 'reviewer-run',
       probes: [{
-        id: 'R-secret',
-        type: 'file_digest',
-        path: 'linked/secret.txt',
-        supportsClaimIds: ['C-implementation'],
-        supportsCriterionIds: ['AC-file'],
+        id: 'R-secret', type: 'file_digest', path: 'linked/secret.txt',
+        supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-file'],
       }],
     }),
     (error) => error instanceof TaskProofError && error.code === 'PHYSICAL_PATH_ESCAPE',
   );
 });
 
-test('strict probes issue digest-bound receipts', () => {
+test('strict probes issue tamper-evident criterion-bound receipts', () => {
   const repo = repository();
   const result = probeRepositoryEvidenceStrict({
     repositoryPath: repo,
     reviewerRunId: 'reviewer-run',
     probes: [{
-      id: 'R-change',
-      type: 'changed_path',
-      path: 'app.txt',
-      supportsClaimIds: ['C-implementation'],
-      supportsCriterionIds: ['AC-file'],
+      id: 'R-change', type: 'changed_path', path: 'app.txt',
+      supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-file'],
     }],
   });
   assert.equal(verifyMcpReceipt(result.evidence[0], result.snapshot.snapshotDigest), true);
@@ -121,18 +133,15 @@ test('strict probes issue digest-bound receipts', () => {
   assert.equal(verifyMcpReceipt(result.evidence[0], result.snapshot.snapshotDigest), false);
 });
 
-test('unrelated deterministic evidence cannot verify a criterion', () => {
+test('unrelated evidence cannot verify an uncovered criterion', () => {
   const repo = repository();
   const snapshot = createRepositorySnapshot({ repositoryPath: repo });
   const observed = probeRepositoryEvidenceStrict({
     repositoryPath: repo,
     reviewerRunId: 'reviewer-run',
     probes: [{
-      id: 'R-change',
-      type: 'changed_path',
-      path: 'app.txt',
-      supportsClaimIds: ['C-implementation'],
-      supportsCriterionIds: ['AC-file'],
+      id: 'R-change', type: 'changed_path', path: 'app.txt',
+      supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-file'],
     }],
   });
   const review = finalizeReviewStrict({
@@ -140,10 +149,7 @@ test('unrelated deterministic evidence cannot verify a criterion', () => {
     reviewer: { runId: 'reviewer-run', role: 'reviewer' },
     snapshot: observed.snapshot,
     findings: [{
-      claimId: 'C-implementation',
-      verdict: 'verified',
-      rationale: 'Only the file change was reproduced.',
-      reviewEvidenceIds: ['R-change'],
+      claimId: 'C-implementation', verdict: 'verified', rationale: 'Only the file change was reproduced.', reviewEvidenceIds: ['R-change'],
     }],
     reviewEvidence: observed.evidence,
   });
@@ -154,16 +160,12 @@ test('unrelated deterministic evidence cannot verify a criterion', () => {
 
 test('named check execution is disabled by default', () => {
   const repo = repository();
-  mkdirSync(path.join(repo, '.task-proof'));
-  writeFileSync(path.join(repo, '.task-proof', 'checks.json'), JSON.stringify({
-    version: 1,
-    checks: [{ id: 'acceptance', command: process.execPath, args: ['-e', 'process.exit(0)'] }],
-  }));
+  allowlistedPolicy(repo);
   const previous = process.env.TASK_PROOF_ALLOW_EXECUTION;
   delete process.env.TASK_PROOF_ALLOW_EXECUTION;
   try {
     assert.throws(
-      () => runNamedChecks({
+      () => runNamedChecksStrict({
         repositoryPath: repo,
         reviewerRunId: 'reviewer-run',
         requests: [{
@@ -179,13 +181,9 @@ test('named check execution is disabled by default', () => {
   }
 });
 
-test('allowlisted named check and changed-path receipt can produce PASS', () => {
+test('allowlisted check plus changed-path evidence can produce PASS', () => {
   const repo = repository();
-  mkdirSync(path.join(repo, '.task-proof'));
-  writeFileSync(path.join(repo, '.task-proof', 'checks.json'), JSON.stringify({
-    version: 1,
-    checks: [{ id: 'acceptance', command: process.execPath, args: ['-e', 'process.exit(0)'], cwd: '.' }],
-  }));
+  allowlistedPolicy(repo, 0);
   const previous = process.env.TASK_PROOF_ALLOW_EXECUTION;
   process.env.TASK_PROOF_ALLOW_EXECUTION = '1';
   try {
@@ -197,7 +195,7 @@ test('allowlisted named check and changed-path receipt can produce PASS', () => 
         supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-file'],
       }],
     });
-    const checkResult = runNamedChecks({
+    const checkResult = runNamedChecksStrict({
       repositoryPath: repo,
       reviewerRunId: 'reviewer-run',
       requests: [{
@@ -211,8 +209,7 @@ test('allowlisted named check and changed-path receipt can produce PASS', () => 
       reviewer: { runId: 'reviewer-run', role: 'reviewer' },
       snapshot: fileResult.snapshot,
       findings: [{
-        claimId: 'C-implementation', verdict: 'verified', rationale: 'Both criteria were reproduced.',
-        reviewEvidenceIds: ['R-change', 'R-test'],
+        claimId: 'C-implementation', verdict: 'verified', rationale: 'Both criteria were reproduced.', reviewEvidenceIds: ['R-change', 'R-test'],
       }],
       reviewEvidence: [...fileResult.evidence, ...checkResult.evidence],
     });
@@ -223,21 +220,17 @@ test('allowlisted named check and changed-path receipt can produce PASS', () => 
   }
 });
 
-test('a failing named check cannot support PASS', () => {
+test('failing named check cannot support PASS', () => {
   const repo = repository();
-  mkdirSync(path.join(repo, '.task-proof'));
-  writeFileSync(path.join(repo, '.task-proof', 'checks.json'), JSON.stringify({
-    version: 1,
-    checks: [{ id: 'fail', command: process.execPath, args: ['-e', 'process.exit(7)'] }],
-  }));
+  allowlistedPolicy(repo, 7);
   const previous = process.env.TASK_PROOF_ALLOW_EXECUTION;
   process.env.TASK_PROOF_ALLOW_EXECUTION = '1';
   try {
-    const checkResult = runNamedChecks({
+    const checkResult = runNamedChecksStrict({
       repositoryPath: repo,
       reviewerRunId: 'reviewer-run',
       requests: [{
-        id: 'R-test', checkId: 'fail', kind: 'test',
+        id: 'R-test', checkId: 'acceptance', kind: 'test',
         supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-test'],
       }],
     });
@@ -247,12 +240,39 @@ test('a failing named check cannot support PASS', () => {
       reviewer: { runId: 'reviewer-run', role: 'reviewer' },
       snapshot: checkResult.snapshot,
       findings: [{
-        claimId: 'C-implementation', verdict: 'verified', rationale: 'Attempted check.',
-        reviewEvidenceIds: ['R-test'],
+        claimId: 'C-implementation', verdict: 'verified', rationale: 'Attempted check.', reviewEvidenceIds: ['R-test'],
       }],
       reviewEvidence: checkResult.evidence,
     });
     assert.equal(review.gate.status, 'FAIL');
+  } finally {
+    if (previous === undefined) delete process.env.TASK_PROOF_ALLOW_EXECUTION;
+    else process.env.TASK_PROOF_ALLOW_EXECUTION = previous;
+  }
+});
+
+test('named check that mutates the repository invalidates the review', () => {
+  const repo = repository();
+  mkdirSync(path.join(repo, '.task-proof'));
+  writeFileSync(path.join(repo, '.task-proof', 'mutate.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync('mutation.txt', 'x');\n");
+  writeFileSync(path.join(repo, '.task-proof', 'checks.json'), JSON.stringify({
+    version: 1,
+    checks: [{ id: 'mutate', command: process.execPath, args: ['.task-proof/mutate.mjs'], cwd: '.' }],
+  }));
+  const previous = process.env.TASK_PROOF_ALLOW_EXECUTION;
+  process.env.TASK_PROOF_ALLOW_EXECUTION = '1';
+  try {
+    assert.throws(
+      () => runNamedChecksStrict({
+        repositoryPath: repo,
+        reviewerRunId: 'reviewer-run',
+        requests: [{
+          id: 'R-mutate', checkId: 'mutate', kind: 'test',
+          supportsClaimIds: ['C-implementation'], supportsCriterionIds: ['AC-test'],
+        }],
+      }),
+      (error) => error instanceof TaskProofError && error.code === 'CHECK_MUTATED_REPOSITORY',
+    );
   } finally {
     if (previous === undefined) delete process.env.TASK_PROOF_ALLOW_EXECUTION;
     else process.env.TASK_PROOF_ALLOW_EXECUTION = previous;
