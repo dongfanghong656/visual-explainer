@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "task-proof-visualizer",
+  "projectName": "Visual Explainer Task Proof",
+  "repository": {
+    "owner": "dongfanghong656",
+    "name": "visual-explainer",
+    "defaultBranch": "main",
+    "managedBranch": "chat/task-proof-visualizer/v0.1.0"
+  },
+  "authorityPaths": {
+    "agentContract": "PROJECT_AGENT.md",
+    "requirements": "docs/requirements/MASTER_REQUIREMENTS.md",
+    "specification": "docs/specs/MASTER_SPEC.md",
+    "plan": "docs/PROJECT_PLAN.md",
+    "tasks": "docs/tasks/MASTER_TASKS.md",
+    "traceability": "docs/TRACEABILITY_MATRIX.md",
+    "artifacts": "docs/ARTIFACT_REGISTRY.md",
+    "claims": "docs/CLAIM_LEDGER.md",
+    "decisions": "docs/DECISION_REGISTER.md",
+    "risks": "docs/RISK_REGISTER.md",
+    "evidenceAndAcceptance": "docs/TEST_AND_ACCEPTANCE.md",
+    "release": "docs/RELEASE_STATUS.md",
+    "handoff": "docs/HANDOFF.md"
+  },
+  "phase": "ALPHA_MVP_IN_REVIEW",
+  "milestone": "v0.11.0-alpha.1 development candidate",
+  "sync": {
+    "status": "SYNCED",
+    "baseRevision": "df35d97a00191d8aba831e757a65dd6ce0514fc0",
+    "lastSyncedCommit": "PENDING_SELF_REFERENCE",
+    "latestTurn": "TURN-0001",
+    "latestCheckpoint": "CHK-0001",
+    "pendingSelfReference": true
+  },
+  "counters": {
+    "requirement": 6,
+    "spec": 2,
+    "task": 6,
+    "artifact": 6,
+    "evidence": 6,
+    "decision": 5,
+    "risk": 5,
+    "checkpoint": 2,
+    "turn": 2,
+    "release": 2
+  },
+  "active": {
+    "requirements": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0003",
+      "REQ-0004",
+      "REQ-0005"
+    ],
+    "specs": [
+      "SPEC-0001"
+    ],
+    "tasks": [
+      "TASK-0005"
+    ],
+    "artifacts": [
+      "ART-0001",
+      "ART-0002",
+      "ART-0003",
+      "ART-0004",
+      "ART-0005"
+    ],
+    "risks": [
+      "RSK-0001",
+      "RSK-0002",
+      "RSK-0003",
+      "RSK-0004"
+    ],
+    "releases": [
+      "REL-0001"
+    ]
+  },
+  "gates": {
+    "developmentAcceptance": "BLOCKED",
+    "release": "BLOCKED",
+    "reason": "Core modules are tested, but the full MCP stdio workflow has not been executed in a clean dependency-installed environment."
+  },
+  "blockers": [
+    "RSK-0001"
+  ],
+  "nextAction": "Install the declared Node dependencies in a clean checkout and run an end-to-end MCP stdio author/reviewer handshake against a real repository."
+}

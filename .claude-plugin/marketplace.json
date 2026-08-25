@@ -1,30 +1,32 @@
 {
   "name": "visual-explainer-marketplace",
   "owner": {
-    "name": "nicobailon"
+    "name": "dongfanghong656"
   },
   "metadata": {
-    "description": "Plugin distribution for visual-explainer",
-    "version": "0.10.0",
+    "description": "Visual Explainer distribution with evidence-gated Task Proof",
+    "version": "0.11.0-alpha.1",
     "pluginRoot": "./plugins"
   },
   "plugins": [
     {
       "name": "visual-explainer",
       "source": "./plugins/visual-explainer",
-      "description": "Generate beautiful HTML pages for diagrams, diff reviews, plan reviews, slides, and data tables",
-      "version": "0.10.0",
+      "description": "Generate visual explanations plus evidence-gated AI completion claims and independent reviews",
+      "version": "0.11.0-alpha.1",
       "author": {
         "name": "nicobailon"
       },
-      "repository": "https://github.com/nicobailon/visual-explainer",
+      "repository": "https://github.com/dongfanghong656/visual-explainer",
       "license": "MIT",
       "keywords": [
         "diagrams",
         "html",
         "visualization",
         "diff-review",
-        "slides"
+        "slides",
+        "task-proof",
+        "independent-review"
       ],
       "category": "visualization",
       "tags": [
@@ -32,7 +34,9 @@
         "html-generation",
         "code-review",
         "slides",
-        "mermaid"
+        "mermaid",
+        "task-proof",
+        "evidence-review"
       ]
     }
   ]

@@ -1,5 +1,5 @@
 {
   "name": "visual-explainer-marketplace",
-  "description": "Plugin distribution for visual-explainer",
-  "version": "0.10.0"
+  "description": "Plugin distribution for visual-explainer with Task Proof",
+  "version": "0.11.0-alpha.1"
 }
