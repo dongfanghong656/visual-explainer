@@ -14,6 +14,8 @@ import {
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_GIT_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_PROBES = 100;
+const MAX_LOCATORS_PER_CRITERION = 32;
+const MAX_LOCATOR_CHARS = 512;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const SHA_RE = /^[0-9a-f]{40}$/i;
 const RECEIPT_ISSUER = 'visual-explainer-task-proof-mcp';
@@ -137,20 +139,39 @@ export function validateClaimEvidencePolicy(claim) {
   const criteria = claim.task?.acceptanceCriteria;
   if (!Array.isArray(criteria)) return { ok: errors.length === 0, errors };
   for (const [index, criterion] of criteria.entries()) {
-    if (!isRecord(criterion) || criterion.requiredEvidenceKinds === undefined) continue;
-    if (!Array.isArray(criterion.requiredEvidenceKinds) || criterion.requiredEvidenceKinds.length === 0) {
-      errors.push({ code: 'REQUIRED_EVIDENCE_KINDS', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: 'requiredEvidenceKinds must be a non-empty array when present.' });
-      continue;
+    if (!isRecord(criterion)) continue;
+    if (criterion.requiredEvidenceKinds !== undefined) {
+      if (!Array.isArray(criterion.requiredEvidenceKinds) || criterion.requiredEvidenceKinds.length === 0) {
+        errors.push({ code: 'REQUIRED_EVIDENCE_KINDS', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: 'requiredEvidenceKinds must be a non-empty array when present.' });
+      } else {
+        const seen = new Set();
+        for (const kind of criterion.requiredEvidenceKinds) {
+          if (!ALLOWED_REQUIRED_KINDS.has(kind)) {
+            errors.push({ code: 'REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Unsupported required evidence kind: ${kind}` });
+          }
+          if (seen.has(kind)) {
+            errors.push({ code: 'DUPLICATE_REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Duplicate required evidence kind: ${kind}` });
+          }
+          seen.add(kind);
+        }
+      }
     }
-    const seen = new Set();
-    for (const kind of criterion.requiredEvidenceKinds) {
-      if (!ALLOWED_REQUIRED_KINDS.has(kind)) {
-        errors.push({ code: 'REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Unsupported required evidence kind: ${kind}` });
+    if (criterion.requiredEvidenceLocators !== undefined) {
+      const locators = criterion.requiredEvidenceLocators;
+      if (!Array.isArray(locators) || locators.length === 0 || locators.length > MAX_LOCATORS_PER_CRITERION) {
+        errors.push({ code: 'REQUIRED_EVIDENCE_LOCATORS', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceLocators`, message: `requiredEvidenceLocators must contain 1-${MAX_LOCATORS_PER_CRITERION} entries.` });
+      } else {
+        const seen = new Set();
+        for (const locator of locators) {
+          if (typeof locator !== 'string' || locator.length === 0 || locator.length > MAX_LOCATOR_CHARS || locator.includes('\0')) {
+            errors.push({ code: 'REQUIRED_EVIDENCE_LOCATOR', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceLocators`, message: 'Evidence locators must be bounded non-empty strings.' });
+          }
+          if (seen.has(locator)) {
+            errors.push({ code: 'DUPLICATE_REQUIRED_EVIDENCE_LOCATOR', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceLocators`, message: `Duplicate required evidence locator: ${locator}` });
+          }
+          seen.add(locator);
+        }
       }
-      if (seen.has(kind)) {
-        errors.push({ code: 'DUPLICATE_REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Duplicate required evidence kind: ${kind}` });
-      }
-      seen.add(kind);
     }
   }
   return { ok: errors.length === 0, errors };
@@ -259,7 +280,10 @@ export function reviewEvidenceCovers(evidence, claimId, criterionId, criterion, 
   if (!evidence.receipt.supportsClaimIds.includes(claimId)) return false;
   if (!evidence.receipt.supportsCriterionIds.includes(criterionId)) return false;
   const requiredKinds = Array.isArray(criterion?.requiredEvidenceKinds) ? criterion.requiredEvidenceKinds : [];
-  return requiredKinds.length === 0 || requiredKinds.includes(evidence.kind);
+  if (requiredKinds.length > 0 && !requiredKinds.includes(evidence.kind)) return false;
+  const requiredLocators = Array.isArray(criterion?.requiredEvidenceLocators) ? criterion.requiredEvidenceLocators : [];
+  if (requiredLocators.length > 0 && !requiredLocators.includes(evidence.locator)) return false;
+  return true;
 }
 
 export function computeStrictGateStatus(claims, findings) {
@@ -300,6 +324,11 @@ export function evaluateFindingCoverage({ claimItem, criterionMap: criteria, evi
 export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [], reviewEvidence = [] }) {
   const snapshotValidation = validateSnapshot(snapshot);
   if (!snapshotValidation.ok) throw new TaskProofError('INVALID_SNAPSHOT', 'Review snapshot validation failed.', snapshotValidation);
+  if (snapshot.repository?.workingTreeFingerprintComplete === false) {
+    throw new TaskProofError('INCOMPLETE_SNAPSHOT', 'Review cannot issue a gate from an incompletely fingerprinted dirty working tree.', {
+      reasons: snapshot.repository.workingTreeFingerprintIncompleteReasons ?? [],
+    });
+  }
   if (!isRecord(reviewer) || reviewer.runId === claim?.producer?.runId) {
     throw new TaskProofError('NOT_INDEPENDENT', 'Reviewer runId must differ from claimant runId.');
   }
