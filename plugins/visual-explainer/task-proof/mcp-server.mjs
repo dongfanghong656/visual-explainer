@@ -7,6 +7,7 @@ import {
   CLAIM_KIND,
   PROTOCOL_VERSION,
   TaskProofError,
+  sha256,
   validateClaim,
 } from './core.mjs';
 import { writeTaskProofArtifactsStrict as writeTaskProofArtifacts } from './artifact-store.mjs';
@@ -137,6 +138,13 @@ function textResult(payload, isError = false) {
   return { isError, content: [{ type: 'text', text: `${JSON.stringify(payload, null, 2)}\n` }] };
 }
 
+function semanticDigest(value) {
+  const copy = { ...value };
+  delete copy.artifactDigest;
+  delete copy.manifestDigest;
+  return sha256(copy);
+}
+
 function validateClaimModel(claim) {
   const structural = validateClaim(claim);
   const policy = validateClaimEvidencePolicy(claim);
@@ -260,6 +268,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       review.repository.workingTreeFingerprintComplete = snapshot.repository.workingTreeFingerprintComplete;
       review.repository.workingTreeFingerprintIncompleteReasons = snapshot.repository.workingTreeFingerprintIncompleteReasons;
       review.repository.workingTreeHashedBytes = snapshot.repository.workingTreeHashedBytes;
+      review.artifactDigest = semanticDigest(review);
       const files = writeTaskProofArtifacts({
         artifact: review, repositoryPath, basename: args.basename ?? `${claim.task.id}-review`,
       });
