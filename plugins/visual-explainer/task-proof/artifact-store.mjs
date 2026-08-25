@@ -11,6 +11,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -51,9 +52,15 @@ function isInside(root, candidate) {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
-function artifactDigest(value) {
+function semanticArtifactDigest(value) {
   const copy = { ...value };
   delete copy.artifactDigest;
+  delete copy.manifestDigest;
+  return sha256(copy);
+}
+
+function semanticManifestDigest(value) {
+  const copy = { ...value };
   delete copy.manifestDigest;
   return sha256(copy);
 }
@@ -86,7 +93,24 @@ function writeDurable(filename, content) {
 function atomicPointer(filename, content) {
   const temporary = `${filename}.tmp-${process.pid}-${Date.now()}`;
   writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  renameSync(temporary, filename);
+  try {
+    renameSync(temporary, filename);
+  } catch (error) {
+    if (!['EEXIST', 'EPERM'].includes(error?.code)) {
+      rmSync(temporary, { force: true });
+      throw error;
+    }
+    const backup = `${filename}.bak-${process.pid}-${Date.now()}`;
+    try {
+      if (existsSync(filename)) renameSync(filename, backup);
+      renameSync(temporary, filename);
+      rmSync(backup, { force: true });
+    } catch (replacementError) {
+      if (existsSync(backup) && !existsSync(filename)) renameSync(backup, filename);
+      rmSync(temporary, { force: true });
+      throw replacementError;
+    }
+  }
 }
 
 function expectedGate(review) {
@@ -137,7 +161,7 @@ export function validateReviewArtifact(review) {
   }
   const computedGate = expectedGate(review);
   if (review.gate?.status !== computedGate) errors.push({ code: 'GATE_MISMATCH', message: `Stored gate ${review.gate?.status} does not match computed gate ${computedGate}.` });
-  const computedDigest = artifactDigest(review);
+  const computedDigest = semanticArtifactDigest(review);
   if (review.artifactDigest !== computedDigest) errors.push({ code: 'ARTIFACT_DIGEST', message: 'Review artifact digest is missing or incorrect.' });
   return { ok: errors.length === 0, errors, computedGate, computedDigest };
 }
@@ -157,13 +181,32 @@ export function validateTaskProofArtifact(artifact) {
   return { ok: false, errors: [{ code: 'KIND', message: 'Only Task Proof claim and review artifacts can be stored.' }] };
 }
 
-function verifyExisting(finalDirectory, manifestDigest) {
-  const stat = lstatSync(finalDirectory);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new TaskProofError('OUTPUT_COLLISION', 'Existing artifact path is not a regular directory.');
+function ensureSafeDirectory(directory, confinementRoot) {
+  const stat = lstatSync(directory);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new TaskProofError('OUTPUT_COLLISION', 'Artifact output component is not a regular directory.');
+  const physical = realpathSync(directory);
+  if (!isInside(confinementRoot, physical)) throw new TaskProofError('OUTPUT_ESCAPE', 'Artifact output component escapes confinement.');
+  return physical;
+}
+
+function verifyExisting(finalDirectory, expectedManifest) {
+  ensureSafeDirectory(finalDirectory, path.dirname(path.dirname(finalDirectory)));
   const manifestPath = path.join(finalDirectory, 'manifest.json');
   if (!existsSync(manifestPath)) throw new TaskProofError('OUTPUT_INCOMPLETE', 'Existing immutable artifact directory has no manifest.');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  if (manifest.manifestDigest !== manifestDigest) throw new TaskProofError('OUTPUT_COLLISION', 'Existing artifact directory has different content.');
+  const storedDigest = manifest.manifestDigest;
+  if (storedDigest !== semanticManifestDigest(manifest)) throw new TaskProofError('OUTPUT_TAMPERED', 'Existing artifact manifest digest is invalid.');
+  if (storedDigest !== expectedManifest.manifestDigest) throw new TaskProofError('OUTPUT_COLLISION', 'Existing artifact directory has different content.');
+  for (const descriptor of Object.values(manifest.files ?? {})) {
+    const filename = path.resolve(finalDirectory, path.basename(descriptor.path));
+    if (!isInside(finalDirectory, filename) || !existsSync(filename)) throw new TaskProofError('OUTPUT_INCOMPLETE', `Missing immutable artifact file: ${descriptor.path}`);
+    const stat = lstatSync(filename);
+    if (stat.isSymbolicLink() || !stat.isFile()) throw new TaskProofError('OUTPUT_TAMPERED', `Artifact file is not regular: ${descriptor.path}`);
+    const bytes = readFileSync(filename);
+    if (sha256(bytes) !== descriptor.digest || bytes.length !== descriptor.sizeBytes) {
+      throw new TaskProofError('OUTPUT_TAMPERED', `Artifact file digest or size mismatch: ${descriptor.path}`);
+    }
+  }
 }
 
 export function writeTaskProofArtifactsStrict({ artifact, repositoryPath = '.', basename } = {}) {
@@ -172,8 +215,7 @@ export function writeTaskProofArtifactsStrict({ artifact, repositoryPath = '.', 
   const root = repositoryRoot(repositoryPath);
   const outputRoot = path.join(root, '.artifacts', 'task-proof');
   mkdirSync(outputRoot, { recursive: true, mode: 0o700 });
-  const physicalOutputRoot = realpathSync(outputRoot);
-  if (!isInside(root, physicalOutputRoot)) throw new TaskProofError('OUTPUT_ESCAPE', 'Artifact output root escapes the repository.');
+  const physicalOutputRoot = ensureSafeDirectory(outputRoot, root);
 
   const digestMatch = DIGEST_RE.exec(artifact.artifactDigest);
   if (!digestMatch) throw new TaskProofError('ARTIFACT_DIGEST', 'Artifact digest is invalid.');
@@ -181,6 +223,7 @@ export function writeTaskProofArtifactsStrict({ artifact, repositoryPath = '.', 
   const stem = safeStem(basename ?? artifact.id);
   const stemDirectory = path.join(outputRoot, stem);
   mkdirSync(stemDirectory, { recursive: true, mode: 0o700 });
+  ensureSafeDirectory(stemDirectory, physicalOutputRoot);
   const finalDirectory = path.join(stemDirectory, digestHex);
   if (!isInside(outputRoot, finalDirectory)) throw new TaskProofError('OUTPUT_ESCAPE', 'Artifact directory escaped the output root.');
 
@@ -188,28 +231,34 @@ export function writeTaskProofArtifactsStrict({ artifact, repositoryPath = '.', 
   const svg = renderTaskProofSvg(artifact);
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><title>${escapeHtml(artifact.task?.title ?? 'Task Proof')}</title><style>html,body{margin:0;background:#0d1117}svg{display:block;width:100vw;height:auto;max-height:100vh}</style></head><body>${svg}</body></html>`;
   const relativeDirectory = path.relative(root, finalDirectory).split(path.sep).join('/');
+  const payloads = {
+    'artifact.json': json,
+    'diagram.svg': svg,
+    'index.html': html,
+  };
   const manifest = {
     protocolVersion: PROTOCOL_VERSION,
     artifactId: artifact.id,
     artifactKind: artifact.kind,
     artifactDigest: artifact.artifactDigest,
     directory: relativeDirectory,
-    files: {
-      json: { path: `${relativeDirectory}/artifact.json`, digest: sha256(json) },
-      svg: { path: `${relativeDirectory}/diagram.svg`, digest: sha256(svg) },
-      html: { path: `${relativeDirectory}/index.html`, digest: sha256(html) },
-    },
+    files: Object.fromEntries(Object.entries(payloads).map(([name, content]) => [
+      name.replace(/\.[^.]+$/, ''),
+      {
+        path: `${relativeDirectory}/${name}`,
+        digest: sha256(content),
+        sizeBytes: Buffer.byteLength(content, 'utf8'),
+      },
+    ])),
   };
-  manifest.manifestDigest = artifactDigest(manifest);
+  manifest.manifestDigest = semanticManifestDigest(manifest);
 
   if (existsSync(finalDirectory)) {
-    verifyExisting(finalDirectory, manifest.manifestDigest);
+    verifyExisting(finalDirectory, manifest);
   } else {
     const temporary = mkdtempSync(path.join(outputRoot, '.tmp-'));
     try {
-      writeDurable(path.join(temporary, 'artifact.json'), json);
-      writeDurable(path.join(temporary, 'diagram.svg'), svg);
-      writeDurable(path.join(temporary, 'index.html'), html);
+      for (const [name, content] of Object.entries(payloads)) writeDurable(path.join(temporary, name), content);
       writeDurable(path.join(temporary, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
       renameSync(temporary, finalDirectory);
     } catch (error) {
