@@ -4,16 +4,18 @@ on:
   pull_request:
     paths:
       - '.github/workflows/task-proof.yml'
+      - '.task-proof/**'
       - 'plugins/visual-explainer/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
       - 'docs/task-proof/**'
   push:
     branches:
       - main
-      - 'chat/task-proof-*'
-      - 'stage/task-proof-*'
+      - 'chat/task-proof-**'
+      - 'stage/task-proof-**'
     paths:
       - '.github/workflows/task-proof.yml'
+      - '.task-proof/**'
       - 'plugins/visual-explainer/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
       - 'docs/task-proof/**'
@@ -37,19 +39,23 @@ jobs:
       - name: Syntax check
         run: |
           node --check plugins/visual-explainer/task-proof/core.mjs
+          node --check plugins/visual-explainer/task-proof/hardening.mjs
           node --check plugins/visual-explainer/task-proof/mcp-server.mjs
-      - name: Parse JSON schemas and examples
+      - name: Parse JSON schemas, policies, and examples
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
           for (const filename of [
             'plugins/visual-explainer/task-proof/task-proof.schema.json',
+            '.task-proof/checks.json',
             'plugins/visual-explainer/task-proof/examples/scroll-restoration.review.json'
           ]) {
             if (fs.existsSync(filename)) JSON.parse(fs.readFileSync(filename, 'utf8'));
           }
           NODE
       - name: Core and adversarial tests
+        env:
+          TASK_PROOF_ALLOW_EXECUTION: '1'
         run: node --test plugins/visual-explainer/task-proof/*.test.mjs
 
   mcp-contract:
@@ -70,8 +76,9 @@ jobs:
           for (const expected of [
             'task_proof_snapshot',
             'task_proof_probe',
-            'task_proof_claim',
+            'task_proof_run_checks',
             'task_proof_validate_claim',
+            'task_proof_claim',
             'task_proof_review'
           ]) {
             if (!names.includes(expected)) throw new Error(`Missing MCP tool: ${expected}`);
