@@ -99,9 +99,22 @@ test('snapshot is bounded and bundle writes only inside .task-proof', () => {
     assert.equal(snapshot.files.length, 1);
     assert.match(snapshot.files[0].sha256, /^[a-f0-9]{64}$/);
 
+    assert.throws(
+      () => collectSnapshot({ workspaceRoot: root, evidenceFiles: ['../outside.txt'] }),
+      /escapes workspace/,
+    );
+
     const output = writeBundle({ workspaceRoot: root, manifest: producer, outputName: 'TEST_PROOF' });
     assert.equal(output.paths.manifest, '.task-proof/TEST_PROOF.json');
     assert.match(readFileSync(join(root, output.paths.validation), 'utf8'), /verified_complete/);
+    assert.throws(
+      () => writeBundle({ workspaceRoot: root, manifest: producer, outputName: 'TEST_PROOF' }),
+      /refusing to overwrite/,
+    );
+    assert.throws(
+      () => writeBundle({ workspaceRoot: root, manifest: producer, outputName: '../escape' }),
+      /outputName/,
+    );
   } finally {
     if (previousAllowed === undefined) delete process.env.TASK_PROOF_ALLOWED_ROOTS;
     else process.env.TASK_PROOF_ALLOWED_ROOTS = previousAllowed;
