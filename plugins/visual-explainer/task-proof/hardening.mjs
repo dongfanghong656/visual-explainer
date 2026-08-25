@@ -1,9 +1,5 @@
-import { execFileSync, spawnSync } from 'node:child_process';
-import {
-  lstatSync,
-  readFileSync,
-  realpathSync,
-} from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import {
   TaskProofError,
@@ -14,13 +10,12 @@ import {
 } from './core.mjs';
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
-const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_GIT_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAX_PROBES = 100;
-const MAX_CHECKS = 20;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const SHA_RE = /^[0-9a-f]{40}$/i;
-const SAFE_CHECK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const RECEIPT_ISSUER = 'visual-explainer-task-proof-mcp';
+const ALLOWED_REQUIRED_KINDS = new Set(['commit', 'diffstat', 'file', 'test', 'build', 'trace', 'manual', 'external']);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -33,13 +28,26 @@ function ensureId(value, label) {
   return value;
 }
 
+function uniqueIds(values, label) {
+  const output = [];
+  const seen = new Set();
+  for (const value of values ?? []) {
+    ensureId(value, label);
+    if (!seen.has(value)) {
+      seen.add(value);
+      output.push(value);
+    }
+  }
+  return output;
+}
+
 function git(repositoryRoot, args, { optional = false } = {}) {
   try {
     return execFileSync('git', ['-C', repositoryRoot, ...args], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15_000,
-      maxBuffer: MAX_OUTPUT_BYTES,
+      maxBuffer: MAX_GIT_OUTPUT_BYTES,
       windowsHide: true,
     }).trim();
   } catch (error) {
@@ -70,30 +78,14 @@ function resolveLexicalPath(root, relativePath) {
 function resolveRegularFile(root, relativePath) {
   const lexical = resolveLexicalPath(root, relativePath);
   let stat;
-  try {
-    stat = lstatSync(lexical);
-  } catch {
-    throw new TaskProofError('FILE_NOT_FOUND', `Evidence file does not exist: ${relativePath}`);
-  }
+  try { stat = lstatSync(lexical); }
+  catch { throw new TaskProofError('FILE_NOT_FOUND', `Evidence file does not exist: ${relativePath}`); }
   if (stat.isSymbolicLink()) throw new TaskProofError('SYMLINK_REJECTED', `Symlink evidence is rejected: ${relativePath}`);
   if (!stat.isFile()) throw new TaskProofError('NOT_A_FILE', `Evidence path is not a regular file: ${relativePath}`);
   if (stat.size > MAX_FILE_BYTES) throw new TaskProofError('FILE_TOO_LARGE', `Evidence file exceeds ${MAX_FILE_BYTES} bytes: ${relativePath}`);
   const physical = realpathSync(lexical);
   if (!isInside(root, physical)) throw new TaskProofError('PHYSICAL_PATH_ESCAPE', `A parent symlink escapes the repository: ${relativePath}`);
   return { lexical, physical, stat };
-}
-
-function uniqueIds(values, label) {
-  const result = [];
-  const seen = new Set();
-  for (const value of values ?? []) {
-    ensureId(value, label);
-    if (!seen.has(value)) {
-      seen.add(value);
-      result.push(value);
-    }
-  }
-  return result;
 }
 
 function makeReceipt({ snapshotDigest, evidenceId, observation, supportsClaimIds, supportsCriterionIds }) {
@@ -119,6 +111,31 @@ export function verifyMcpReceipt(evidence, snapshotDigest) {
     && sha256(unsigned) === receiptDigest;
 }
 
+export function validateClaimEvidencePolicy(claim) {
+  const errors = [];
+  const criteria = claim?.task?.acceptanceCriteria;
+  if (!Array.isArray(criteria)) return { ok: true, errors };
+  for (const [index, criterion] of criteria.entries()) {
+    if (!isRecord(criterion)) continue;
+    if (criterion.requiredEvidenceKinds === undefined) continue;
+    if (!Array.isArray(criterion.requiredEvidenceKinds) || criterion.requiredEvidenceKinds.length === 0) {
+      errors.push({ code: 'REQUIRED_EVIDENCE_KINDS', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: 'requiredEvidenceKinds must be a non-empty array when present.' });
+      continue;
+    }
+    const seen = new Set();
+    for (const kind of criterion.requiredEvidenceKinds) {
+      if (!ALLOWED_REQUIRED_KINDS.has(kind)) {
+        errors.push({ code: 'REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Unsupported required evidence kind: ${kind}` });
+      }
+      if (seen.has(kind)) {
+        errors.push({ code: 'DUPLICATE_REQUIRED_EVIDENCE_KIND', pointer: `/task/acceptanceCriteria/${index}/requiredEvidenceKinds`, message: `Duplicate required evidence kind: ${kind}` });
+      }
+      seen.add(kind);
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 export function probeRepositoryEvidenceStrict({ repositoryPath = '.', reviewerRunId, probes = [], baseRef } = {}) {
   ensureId(reviewerRunId, 'reviewerRunId');
   if (!Array.isArray(probes) || probes.length === 0 || probes.length > MAX_PROBES) {
@@ -135,6 +152,12 @@ export function probeRepositoryEvidenceStrict({ repositoryPath = '.', reviewerRu
     const id = ensureId(probe.id, `probe ${index}`);
     if (seen.has(id)) throw new TaskProofError('DUPLICATE_PROBE', `Duplicate probe id: ${id}`);
     seen.add(id);
+    const supportsClaimIds = uniqueIds(probe.supportsClaimIds, 'supportsClaimIds');
+    const supportsCriterionIds = uniqueIds(probe.supportsCriterionIds, 'supportsCriterionIds');
+    if (supportsClaimIds.length === 0 || supportsCriterionIds.length === 0) {
+      throw new TaskProofError('UNBOUND_EVIDENCE', `Probe ${id} must support at least one claim and one criterion.`);
+    }
+
     const observedAt = new Date().toISOString();
     let kind;
     let locator;
@@ -189,132 +212,12 @@ export function probeRepositoryEvidenceStrict({ repositoryPath = '.', reviewerRu
         snapshotDigest: snapshot.snapshotDigest,
         evidenceId: id,
         observation,
-        supportsClaimIds: probe.supportsClaimIds,
-        supportsCriterionIds: probe.supportsCriterionIds,
+        supportsClaimIds,
+        supportsCriterionIds,
       }),
     };
   });
 
-  return { snapshot, evidence };
-}
-
-function readCheckPolicy(root, policyPath) {
-  const selected = policyPath ?? '.task-proof/checks.json';
-  const file = resolveRegularFile(root, selected);
-  let policy;
-  try {
-    policy = JSON.parse(readFileSync(file.physical, 'utf8'));
-  } catch (error) {
-    throw new TaskProofError('CHECK_POLICY', `Cannot parse named-check policy: ${error.message}`);
-  }
-  if (!isRecord(policy) || policy.version !== 1 || !Array.isArray(policy.checks)) {
-    throw new TaskProofError('CHECK_POLICY', 'Named-check policy must have version 1 and a checks array.');
-  }
-  return { policy, selected, digest: sha256(readFileSync(file.physical)) };
-}
-
-function safeCheckDefinition(check, root) {
-  if (!isRecord(check) || typeof check.id !== 'string' || !SAFE_CHECK_ID_RE.test(check.id)) {
-    throw new TaskProofError('CHECK_ID', 'Every named check requires a safe id.');
-  }
-  if (typeof check.command !== 'string' || check.command.trim() === '' || check.command.startsWith('-') || /[\0\r\n]/.test(check.command)) {
-    throw new TaskProofError('CHECK_COMMAND', `Named check ${check.id} has an unsafe executable.`);
-  }
-  if (!Array.isArray(check.args) || check.args.some((arg) => typeof arg !== 'string' || arg.includes('\0'))) {
-    throw new TaskProofError('CHECK_ARGS', `Named check ${check.id} args must be an array of strings.`);
-  }
-  const cwdLexical = resolveLexicalPath(root, check.cwd ?? '.');
-  const cwdPhysical = realpathSync(cwdLexical);
-  if (!isInside(root, cwdPhysical)) throw new TaskProofError('CHECK_CWD_ESCAPE', `Named check ${check.id} cwd escapes the repository.`);
-  const timeoutMs = Math.min(Math.max(Number(check.timeoutMs) || 120_000, 1_000), 600_000);
-  const maxOutputBytes = Math.min(Math.max(Number(check.maxOutputBytes) || 1_048_576, 4_096), MAX_OUTPUT_BYTES);
-  return { id: check.id, command: check.command, args: check.args, cwd: cwdPhysical, timeoutMs, maxOutputBytes };
-}
-
-export function runNamedChecks({ repositoryPath = '.', reviewerRunId, requests = [], baseRef, policyPath } = {}) {
-  ensureId(reviewerRunId, 'reviewerRunId');
-  if (process.env.TASK_PROOF_ALLOW_EXECUTION !== '1') {
-    throw new TaskProofError('EXECUTION_DISABLED', 'Named checks are disabled. Set TASK_PROOF_ALLOW_EXECUTION=1 only after reviewing the repository policy.');
-  }
-  if (!Array.isArray(requests) || requests.length === 0 || requests.length > MAX_CHECKS) {
-    throw new TaskProofError('CHECK_REQUESTS', `requests must contain between 1 and ${MAX_CHECKS} named checks.`);
-  }
-  const root = repositoryRoot(repositoryPath);
-  const snapshot = createRepositorySnapshot({ repositoryPath: root, baseRef });
-  const { policy, selected, digest: policyDigest } = readCheckPolicy(root, policyPath);
-  const definitions = new Map(policy.checks.map((item) => {
-    const safe = safeCheckDefinition(item, root);
-    return [safe.id, safe];
-  }));
-  const seen = new Set();
-
-  const evidence = requests.map((request, index) => {
-    if (!isRecord(request)) throw new TaskProofError('CHECK_REQUEST', `Check request ${index} must be an object.`);
-    const evidenceId = ensureId(request.id, `check request ${index}`);
-    if (seen.has(evidenceId)) throw new TaskProofError('DUPLICATE_CHECK', `Duplicate evidence id: ${evidenceId}`);
-    seen.add(evidenceId);
-    const definition = definitions.get(request.checkId);
-    if (!definition) throw new TaskProofError('UNKNOWN_CHECK', `Named check is not allowlisted: ${request.checkId}`);
-    const startedAt = new Date().toISOString();
-    const started = Date.now();
-    const execution = spawnSync(definition.command, definition.args, {
-      cwd: definition.cwd,
-      encoding: 'utf8',
-      shell: false,
-      timeout: definition.timeoutMs,
-      maxBuffer: definition.maxOutputBytes,
-      windowsHide: true,
-      env: {
-        PATH: process.env.PATH ?? '',
-        HOME: process.env.HOME ?? '',
-        USERPROFILE: process.env.USERPROFILE ?? '',
-        SYSTEMROOT: process.env.SYSTEMROOT ?? '',
-        CI: 'true',
-        NO_COLOR: '1',
-      },
-    });
-    const stdout = execution.stdout ?? '';
-    const stderr = execution.stderr ?? '';
-    const exitCode = Number.isInteger(execution.status) ? execution.status : 1;
-    const observation = {
-      type: 'named_check',
-      policyPath: selected,
-      policyDigest,
-      checkId: definition.id,
-      command: definition.command,
-      args: definition.args,
-      cwd: path.relative(root, definition.cwd).split(path.sep).join('/') || '.',
-      startedAt,
-      durationMs: Date.now() - started,
-      exitCode,
-      signal: execution.signal ?? null,
-      timedOut: Boolean(execution.error?.code === 'ETIMEDOUT'),
-      stdoutDigest: sha256(stdout),
-      stderrDigest: sha256(stderr),
-    };
-    return {
-      id: evidenceId,
-      kind: request.kind === 'build' ? 'build' : 'test',
-      locator: `named-check:${definition.id}`,
-      observedAt: startedAt,
-      digest: sha256(observation),
-      producerRunId: reviewerRunId,
-      trust: 'deterministic',
-      result: {
-        exitCode,
-        summary: exitCode === 0 ? 'Named check passed.' : `Named check failed${observation.timedOut ? ' by timeout' : ''}.`,
-        stdoutPreview: stdout.slice(0, 1000),
-        stderrPreview: stderr.slice(0, 1000),
-      },
-      receipt: makeReceipt({
-        snapshotDigest: snapshot.snapshotDigest,
-        evidenceId,
-        observation,
-        supportsClaimIds: request.supportsClaimIds,
-        supportsCriterionIds: request.supportsCriterionIds,
-      }),
-    };
-  });
   return { snapshot, evidence };
 }
 
@@ -349,7 +252,9 @@ export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [],
       reviewEvidenceIds: [],
     };
     if (finding.verdict !== 'verified') return finding;
-    const cited = [...new Set(finding.reviewEvidenceIds ?? [])].map((id) => evidenceById.get(id)).filter(Boolean);
+    const cited = [...new Set(finding.reviewEvidenceIds ?? [])]
+      .map((id) => evidenceById.get(id))
+      .filter(Boolean);
     const uncovered = (claimItem.acceptanceCriteriaIds ?? []).filter((criterionId) => {
       const criterion = criteria.get(criterionId);
       return !cited.some((evidence) => evidenceCovers(
