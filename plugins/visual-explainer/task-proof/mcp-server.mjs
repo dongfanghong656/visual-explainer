@@ -7,10 +7,9 @@ import {
   CLAIM_KIND,
   PROTOCOL_VERSION,
   TaskProofError,
-  createRepositorySnapshot,
   validateClaim,
-  writeTaskProofArtifacts,
 } from './core.mjs';
+import { writeTaskProofArtifactsStrict as writeTaskProofArtifacts } from './artifact-store.mjs';
 import {
   finalizeReviewStrict,
   mergeReviewEvidence,
@@ -18,6 +17,7 @@ import {
   validateClaimEvidencePolicy,
 } from './hardening.mjs';
 import { runNamedChecksStrict } from './named-checks.mjs';
+import { createRepositorySnapshotStrict as createRepositorySnapshot } from './snapshot.mjs';
 
 const PROBE_SCHEMA = {
   type: 'object',
@@ -49,27 +49,19 @@ const CHECK_REQUEST_SCHEMA = {
 export const TOOL_DEFINITIONS = [
   {
     name: 'task_proof_snapshot',
-    description: 'Create a read-only deterministic Git snapshot without raw patches or arbitrary commands.',
+    description: 'Create a rename-safe deterministic Git snapshot without raw patches or arbitrary commands.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        repositoryPath: { type: 'string' },
-        baseRef: { type: 'string' },
-      },
+      type: 'object', additionalProperties: false,
+      properties: { repositoryPath: { type: 'string' }, baseRef: { type: 'string' } },
     },
   },
   {
     name: 'task_proof_probe',
-    description: 'Create MCP-produced deterministic receipts for allowlisted repository observations. Each receipt must declare the claim and criterion it supports.',
+    description: 'Create MCP-produced deterministic receipts for allowlisted repository observations, bound to exact claims and criteria.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['reviewerRunId', 'probes'],
+      type: 'object', additionalProperties: false, required: ['reviewerRunId', 'probes'],
       properties: {
-        repositoryPath: { type: 'string' },
-        baseRef: { type: 'string' },
-        reviewerRunId: { type: 'string' },
+        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, reviewerRunId: { type: 'string' },
         probes: { type: 'array', minItems: 1, maxItems: 100, items: PROBE_SCHEMA },
       },
     },
@@ -78,13 +70,9 @@ export const TOOL_DEFINITIONS = [
     name: 'task_proof_run_checks',
     description: 'Run fixed repository-defined checks from .task-proof/checks.json without a shell. Disabled unless TASK_PROOF_ALLOW_EXECUTION=1; never accepts commands or policy paths from the caller.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['reviewerRunId', 'requests'],
+      type: 'object', additionalProperties: false, required: ['reviewerRunId', 'requests'],
       properties: {
-        repositoryPath: { type: 'string' },
-        baseRef: { type: 'string' },
-        reviewerRunId: { type: 'string' },
+        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, reviewerRunId: { type: 'string' },
         requests: { type: 'array', minItems: 1, maxItems: 20, items: CHECK_REQUEST_SCHEMA },
       },
     },
@@ -93,55 +81,36 @@ export const TOOL_DEFINITIONS = [
     name: 'task_proof_validate_claim',
     description: 'Validate and digest a claimant artifact without writing files or granting a completion verdict.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['claim'],
-      properties: { claim: { type: 'object' } },
+      type: 'object', additionalProperties: false, required: ['claim'], properties: { claim: { type: 'object' } },
     },
   },
   {
     name: 'task_proof_claim',
-    description: 'Bind a claimant model to current Git state, validate it, and render an explicitly UNVERIFIED claim.',
+    description: 'Bind a claimant model to current Git state, validate it, and render an explicitly UNVERIFIED immutable artifact set.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['claim'],
+      type: 'object', additionalProperties: false, required: ['claim'],
       properties: {
-        repositoryPath: { type: 'string' },
-        baseRef: { type: 'string' },
-        basename: { type: 'string' },
-        claim: { type: 'object' },
+        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
       },
     },
   },
   {
     name: 'task_proof_review',
-    description: 'Collect fresh MCP-produced evidence, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render the review.',
+    description: 'Collect fresh MCP-produced evidence, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render an immutable review.',
     inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['claim', 'reviewer', 'findings'],
+      type: 'object', additionalProperties: false, required: ['claim', 'reviewer', 'findings'],
       properties: {
-        repositoryPath: { type: 'string' },
-        basename: { type: 'string' },
-        claim: { type: 'object' },
+        repositoryPath: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
         reviewer: {
-          type: 'object',
-          required: ['runId', 'role'],
-          additionalProperties: false,
+          type: 'object', required: ['runId', 'role'], additionalProperties: false,
           properties: {
-            runId: { type: 'string' },
-            role: { const: 'reviewer' },
-            agent: { type: 'string' },
-            model: { type: 'string' },
+            runId: { type: 'string' }, role: { const: 'reviewer' }, agent: { type: 'string' }, model: { type: 'string' },
           },
         },
         findings: {
           type: 'array',
           items: {
-            type: 'object',
-            required: ['claimId', 'verdict', 'rationale', 'reviewEvidenceIds'],
-            additionalProperties: false,
+            type: 'object', required: ['claimId', 'verdict', 'rationale', 'reviewEvidenceIds'], additionalProperties: false,
             properties: {
               claimId: { type: 'string' },
               verdict: { enum: ['verified', 'partially_verified', 'unsupported', 'contradicted', 'stale', 'not_applicable'] },
@@ -165,10 +134,7 @@ function asObject(value, name) {
 }
 
 function textResult(payload, isError = false) {
-  return {
-    isError,
-    content: [{ type: 'text', text: `${JSON.stringify(payload, null, 2)}\n` }],
-  };
+  return { isError, content: [{ type: 'text', text: `${JSON.stringify(payload, null, 2)}\n` }] };
 }
 
 function validateClaimModel(claim) {
@@ -201,18 +167,12 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
 
     case 'task_proof_probe':
       return probeRepositoryEvidenceStrict({
-        repositoryPath,
-        reviewerRunId: args.reviewerRunId,
-        probes: args.probes,
-        baseRef: args.baseRef,
+        repositoryPath, reviewerRunId: args.reviewerRunId, probes: args.probes, baseRef: args.baseRef,
       });
 
     case 'task_proof_run_checks':
       return runNamedChecksStrict({
-        repositoryPath,
-        reviewerRunId: args.reviewerRunId,
-        requests: args.requests,
-        baseRef: args.baseRef,
+        repositoryPath, reviewerRunId: args.reviewerRunId, requests: args.requests, baseRef: args.baseRef,
       });
 
     case 'task_proof_validate_claim':
@@ -238,9 +198,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       if (!validation.ok) throw new TaskProofError('INVALID_CLAIM', 'Claim validation failed.', validation);
       claim.artifactDigest = validation.digest;
       const files = writeTaskProofArtifacts({
-        artifact: claim,
-        repositoryPath,
-        basename: args.basename ?? `${claim.task.id}-claim`,
+        artifact: claim, repositoryPath, basename: args.basename ?? `${claim.task.id}-claim`,
       });
       return {
         status: 'UNVERIFIED',
@@ -262,18 +220,12 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       const collections = [];
       if (Array.isArray(args.probes) && args.probes.length > 0) {
         collections.push(probeRepositoryEvidenceStrict({
-          repositoryPath,
-          reviewerRunId: reviewer.runId,
-          probes: args.probes,
-          baseRef,
+          repositoryPath, reviewerRunId: reviewer.runId, probes: args.probes, baseRef,
         }));
       }
       if (Array.isArray(args.checks) && args.checks.length > 0) {
         collections.push(runNamedChecksStrict({
-          repositoryPath,
-          reviewerRunId: reviewer.runId,
-          requests: args.checks,
-          baseRef,
+          repositoryPath, reviewerRunId: reviewer.runId, requests: args.checks, baseRef,
         }));
       }
       const collected = mergeReviewEvidence(collections);
@@ -281,16 +233,12 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       const finalSnapshot = createRepositorySnapshot({ repositoryPath, baseRef });
       assertNoSnapshotRace(snapshot, finalSnapshot);
       const review = finalizeReviewStrict({
-        claim,
-        reviewer,
-        snapshot,
+        claim, reviewer, snapshot,
         findings: Array.isArray(args.findings) ? args.findings : [],
         reviewEvidence: collected.evidence,
       });
       const files = writeTaskProofArtifacts({
-        artifact: review,
-        repositoryPath,
-        basename: args.basename ?? `${claim.task.id}-review`,
+        artifact: review, repositoryPath, basename: args.basename ?? `${claim.task.id}-review`,
       });
       return { gate: review.gate, review, files };
     }
