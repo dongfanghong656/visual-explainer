@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -14,6 +14,15 @@ const reviewer = JSON.parse(readFileSync(new URL('reviewer.valid.json', fixtures
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function initFixtureRepo(root) {
+  execFileSync('git', ['init', root], { stdio: 'ignore' });
+  execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
+  execFileSync('git', ['-C', root, 'config', 'user.name', 'Task Proof Test']);
+  writeFileSync(join(root, 'README.md'), '# fixture\n');
+  execFileSync('git', ['-C', root, 'add', 'README.md']);
+  execFileSync('git', ['-C', root, 'commit', '-m', 'fixture'], { stdio: 'ignore' });
 }
 
 test('valid done code claim requires and accepts paired primary evidence', () => {
@@ -44,9 +53,18 @@ test('self-report alone cannot verify a done code claim', () => {
 test('failed evidence contradicts a done claim', () => {
   const manifest = clone(producer);
   manifest.evidence.find((item) => item.id === 'E-TEST').result = 'fail';
+  manifest.acceptance[0].status = 'fail';
   const result = validateManifest(manifest);
   assert.equal(result.claims[0].verdict, 'contradicted');
   assert.equal(result.overall, 'contradicted');
+});
+
+test('passed acceptance criterion must cite evidence', () => {
+  const manifest = clone(producer);
+  manifest.acceptance[0].evidenceRefs = [];
+  const result = validateManifest(manifest);
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join('\n'), /is pass but cites no evidence/);
 });
 
 test('blocked claim must name a blocker', () => {
@@ -56,6 +74,31 @@ test('blocked claim must name a blocker', () => {
   const result = validateManifest(manifest);
   assert.equal(result.valid, false);
   assert.match(result.errors.join('\n'), /has no blocker/);
+});
+
+test('producer cannot inject reviewer disposition', () => {
+  const manifest = clone(producer);
+  manifest.claims[0].reviewDisposition = 'accepted';
+  const result = validateManifest(manifest);
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join('\n'), /producer claim .* must not set reviewDisposition/);
+});
+
+test('reviewer cannot accept evidence that remains unverified', () => {
+  const manifest = clone(reviewer);
+  manifest.evidence = [{
+    id: 'RV-SELF',
+    type: 'review',
+    locator: 'chat:reviewer-summary',
+    summary: 'Reviewer repeats the producer conclusion.',
+    result: 'pass',
+    trust: 'self_report',
+  }];
+  manifest.claims[0].evidenceRefs = ['RV-SELF'];
+  manifest.acceptance[0].evidenceRefs = ['RV-SELF'];
+  const result = validateManifest(manifest);
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join('\n'), /cannot be accepted/);
 });
 
 test('producer and reviewer reconcile by stable claim ID', () => {
@@ -68,10 +111,22 @@ test('producer and reviewer reconcile by stable claim ID', () => {
 test('reviewer downgrade is visible', () => {
   const downgraded = clone(reviewer);
   downgraded.claims[0].reviewDisposition = 'rejected';
+  downgraded.claims[0].claimStatus = 'done';
   downgraded.evidence.find((item) => item.id === 'RV-TEST').result = 'fail';
+  downgraded.acceptance[0].status = 'fail';
   const result = compareManifests(producer, downgraded);
   assert.equal(result.overall, 'disputed');
   assert.equal(result.comparisons[0].outcome, 'downgraded');
+});
+
+test('checkpoint mismatch stops reconciliation', () => {
+  const mismatched = clone(reviewer);
+  mismatched.project.head = 'different-head';
+  const result = compareManifests(producer, mismatched);
+  assert.equal(result.valid, false);
+  assert.equal(result.checkpointMatch, false);
+  assert.equal(result.overall, 'checkpoint_mismatch');
+  assert.deepEqual(result.checkpointMismatches.map((item) => item.field), ['head']);
 });
 
 test('Mermaid labels strip active markup delimiters', () => {
@@ -86,12 +141,7 @@ test('snapshot is bounded and bundle writes only inside .task-proof', () => {
   const root = mkdtempSync(join(tmpdir(), 'task-proof-'));
   const previousAllowed = process.env.TASK_PROOF_ALLOWED_ROOTS;
   try {
-    execFileSync('git', ['init', root], { stdio: 'ignore' });
-    execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
-    execFileSync('git', ['-C', root, 'config', 'user.name', 'Task Proof Test']);
-    writeFileSync(join(root, 'README.md'), '# fixture\n');
-    execFileSync('git', ['-C', root, 'add', 'README.md']);
-    execFileSync('git', ['-C', root, 'commit', '-m', 'fixture'], { stdio: 'ignore' });
+    initFixtureRepo(root);
     process.env.TASK_PROOF_ALLOWED_ROOTS = root;
 
     const snapshot = collectSnapshot({ workspaceRoot: root, headRef: 'HEAD', evidenceFiles: ['README.md'] });
@@ -119,5 +169,25 @@ test('snapshot is bounded and bundle writes only inside .task-proof', () => {
     if (previousAllowed === undefined) delete process.env.TASK_PROOF_ALLOWED_ROOTS;
     else process.env.TASK_PROOF_ALLOWED_ROOTS = previousAllowed;
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('writer rejects a symlinked .task-proof directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'task-proof-root-'));
+  const outside = mkdtempSync(join(tmpdir(), 'task-proof-outside-'));
+  const previousAllowed = process.env.TASK_PROOF_ALLOWED_ROOTS;
+  try {
+    initFixtureRepo(root);
+    process.env.TASK_PROOF_ALLOWED_ROOTS = root;
+    symlinkSync(outside, join(root, '.task-proof'), 'dir');
+    assert.throws(
+      () => writeBundle({ workspaceRoot: root, manifest: producer, outputName: 'ESCAPE' }),
+      /symlinked \.task-proof/,
+    );
+  } finally {
+    if (previousAllowed === undefined) delete process.env.TASK_PROOF_ALLOWED_ROOTS;
+    else process.env.TASK_PROOF_ALLOWED_ROOTS = previousAllowed;
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
