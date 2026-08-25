@@ -18,6 +18,7 @@ const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const SHA_RE = /^[0-9a-f]{40}$/i;
 const RECEIPT_ISSUER = 'visual-explainer-task-proof-mcp';
 const ALLOWED_REQUIRED_KINDS = new Set(['commit', 'diffstat', 'file', 'test', 'build', 'trace', 'manual', 'external']);
+const CLAIM_FORBIDDEN_TOP_LEVEL = ['verified', 'verdict', 'gate', 'completionGate', 'reviewer', 'findings', 'reviewEvidence'];
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -43,15 +44,15 @@ function uniqueIds(values, label) {
   return output;
 }
 
-function git(repositoryRoot, args, { optional = false } = {}) {
+function git(repositoryRoot, args, { optional = false, encoding = 'utf8' } = {}) {
   try {
     return execFileSync('git', ['-C', repositoryRoot, ...args], {
-      encoding: 'utf8',
+      encoding,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15_000,
       maxBuffer: MAX_GIT_OUTPUT_BYTES,
       windowsHide: true,
-    }).trim();
+    });
   } catch (error) {
     if (optional) return null;
     const stderr = typeof error?.stderr === 'string' ? error.stderr.trim().slice(0, 500) : '';
@@ -61,7 +62,7 @@ function git(repositoryRoot, args, { optional = false } = {}) {
 
 function repositoryRoot(repositoryPath) {
   const requested = realpathSync(path.resolve(repositoryPath ?? '.'));
-  return realpathSync(git(requested, ['rev-parse', '--show-toplevel']));
+  return realpathSync(git(requested, ['rev-parse', '--show-toplevel']).trim());
 }
 
 function isInside(root, candidate) {
@@ -90,6 +91,11 @@ function resolveRegularFile(root, relativePath) {
   return { lexical, physical, stat };
 }
 
+function splitNul(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length === 0) return [];
+  return buffer.toString('utf8').split('\0').filter(Boolean);
+}
+
 function makeReceipt({ snapshotDigest, evidenceId, observation, supportsClaimIds, supportsCriterionIds }) {
   const receipt = {
     issuer: RECEIPT_ISSUER,
@@ -101,6 +107,13 @@ function makeReceipt({ snapshotDigest, evidenceId, observation, supportsClaimIds
   };
   receipt.receiptDigest = sha256(receipt);
   return receipt;
+}
+
+function semanticDigest(value) {
+  const copy = { ...value };
+  delete copy.artifactDigest;
+  delete copy.manifestDigest;
+  return sha256(copy);
 }
 
 export function verifyMcpReceipt(evidence, snapshotDigest) {
@@ -115,8 +128,14 @@ export function verifyMcpReceipt(evidence, snapshotDigest) {
 
 export function validateClaimEvidencePolicy(claim) {
   const errors = [];
-  const criteria = claim?.task?.acceptanceCriteria;
-  if (!Array.isArray(criteria)) return { ok: true, errors };
+  if (!isRecord(claim)) return { ok: false, errors: [{ code: 'TYPE', pointer: '', message: 'Claim must be an object.' }] };
+  for (const forbidden of CLAIM_FORBIDDEN_TOP_LEVEL) {
+    if (Object.hasOwn(claim, forbidden)) {
+      errors.push({ code: 'SELF_VERIFICATION', pointer: `/${forbidden}`, message: `Claimant artifacts may not contain ${forbidden}.` });
+    }
+  }
+  const criteria = claim.task?.acceptanceCriteria;
+  if (!Array.isArray(criteria)) return { ok: errors.length === 0, errors };
   for (const [index, criterion] of criteria.entries()) {
     if (!isRecord(criterion) || criterion.requiredEvidenceKinds === undefined) continue;
     if (!Array.isArray(criterion.requiredEvidenceKinds) || criterion.requiredEvidenceKinds.length === 0) {
@@ -185,13 +204,20 @@ export function probeRepositoryEvidenceStrict({ repositoryPath = '.', reviewerRu
     } else if (probe.type === 'changed_path') {
       const lexical = resolveLexicalPath(root, probe.path);
       const relative = path.relative(root, lexical).split(path.sep).join('/');
-      const committed = git(root, ['diff', '--name-only', `${snapshot.repository.baseSha}..${snapshot.repository.headSha}`, '--', relative])
-        .split('\n').filter(Boolean);
-      const working = git(root, ['status', '--porcelain=v1', '--', relative], { optional: true }) ?? '';
-      if (!committed.includes(relative) && working.trim() === '') {
+      const committedBuffer = git(root, ['diff', '--name-only', '-z', `${snapshot.repository.baseSha}..${snapshot.repository.headSha}`, '--', relative], { encoding: null });
+      const workingBuffer = git(root, ['status', '--porcelain=v1', '-z', '--', relative], { optional: true, encoding: null }) ?? Buffer.alloc(0);
+      const committed = splitNul(committedBuffer);
+      const workingTreeChanged = workingBuffer.length > 0;
+      if (!committed.includes(relative) && !workingTreeChanged) {
         throw new TaskProofError('PATH_NOT_CHANGED', `Path is not changed in the reviewed scope: ${relative}`);
       }
-      observation = { type: probe.type, path: relative, committed, working: working.trim() };
+      observation = {
+        type: probe.type,
+        path: relative,
+        committed,
+        workingTreeChanged,
+        workingStatusDigest: sha256(workingBuffer),
+      };
       kind = 'diffstat';
       locator = relative;
       digest = sha256(observation);
@@ -226,7 +252,7 @@ function criterionMap(claim) {
   return new Map((claim.task?.acceptanceCriteria ?? []).map((criterion) => [criterion.id, criterion]));
 }
 
-function evidenceCovers(evidence, claimId, criterionId, criterion, snapshotDigest, reviewerRunId) {
+export function reviewEvidenceCovers(evidence, claimId, criterionId, criterion, snapshotDigest, reviewerRunId) {
   if (!verifyMcpReceipt(evidence, snapshotDigest)) return false;
   if (evidence.producerRunId !== reviewerRunId) return false;
   if (evidence.result?.exitCode !== undefined && evidence.result.exitCode !== 0) return false;
@@ -236,15 +262,58 @@ function evidenceCovers(evidence, claimId, criterionId, criterion, snapshotDiges
   return requiredKinds.length === 0 || requiredKinds.includes(evidence.kind);
 }
 
+export function computeStrictGateStatus(claims, findings) {
+  const findingMap = new Map((findings ?? []).map((finding) => [finding.claimId, finding]));
+  const relevant = (claims ?? [])
+    .filter((claim) => claim.declaredStatus === 'declared_done')
+    .map((claim) => findingMap.get(claim.id));
+  if (relevant.length === 0) return 'INCONCLUSIVE';
+  if (relevant.some((finding) => !finding || finding.verdict === 'unsupported' || finding.verdict === 'contradicted')) return 'FAIL';
+  if (relevant.some((finding) => finding.verdict === 'stale')) return 'INCONCLUSIVE';
+  if (relevant.every((finding) => finding.verdict === 'verified')) return 'PASS';
+  if (relevant.every((finding) => ['verified', 'partially_verified'].includes(finding.verdict))
+      && relevant.some((finding) => finding.verdict === 'partially_verified')) return 'PASS_WITH_LIMITS';
+  return 'INCONCLUSIVE';
+}
+
+export function evaluateFindingCoverage({ claimItem, criterionMap: criteria, evidenceById, finding, snapshotDigest, reviewerRunId }) {
+  const cited = [...new Set(finding.reviewEvidenceIds ?? [])]
+    .map((id) => evidenceById.get(id))
+    .filter(Boolean);
+  const covered = [];
+  const uncovered = [];
+  for (const criterionId of claimItem.acceptanceCriteriaIds ?? []) {
+    const criterion = criteria.get(criterionId);
+    if (cited.some((evidence) => reviewEvidenceCovers(
+      evidence,
+      claimItem.id,
+      criterionId,
+      criterion,
+      snapshotDigest,
+      reviewerRunId,
+    ))) covered.push(criterionId);
+    else uncovered.push(criterionId);
+  }
+  return { cited, covered, uncovered };
+}
+
 export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [], reviewEvidence = [] }) {
   const snapshotValidation = validateSnapshot(snapshot);
   if (!snapshotValidation.ok) throw new TaskProofError('INVALID_SNAPSHOT', 'Review snapshot validation failed.', snapshotValidation);
   if (!isRecord(reviewer) || reviewer.runId === claim?.producer?.runId) {
     throw new TaskProofError('NOT_INDEPENDENT', 'Reviewer runId must differ from claimant runId.');
   }
-  const evidenceById = new Map(reviewEvidence.map((evidence) => [evidence.id, evidence]));
+  const evidenceById = new Map();
+  for (const evidence of reviewEvidence) {
+    if (evidenceById.has(evidence.id)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate review evidence id: ${evidence.id}`);
+    evidenceById.set(evidence.id, evidence);
+  }
   const criteria = criterionMap(claim);
-  const submitted = new Map(findings.map((finding) => [finding.claimId, finding]));
+  const submitted = new Map();
+  for (const finding of findings) {
+    if (submitted.has(finding.claimId)) throw new TaskProofError('DUPLICATE_FINDING', `Duplicate finding for claim: ${finding.claimId}`);
+    submitted.set(finding.claimId, finding);
+  }
   const hardenedFindings = (claim.claims ?? []).map((claimItem) => {
     const finding = submitted.get(claimItem.id) ?? {
       claimId: claimItem.id,
@@ -252,31 +321,45 @@ export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [],
       rationale: 'No independent finding was supplied.',
       reviewEvidenceIds: [],
     };
-    if (finding.verdict !== 'verified') return finding;
-    const cited = [...new Set(finding.reviewEvidenceIds ?? [])]
-      .map((id) => evidenceById.get(id))
-      .filter(Boolean);
-    const uncovered = (claimItem.acceptanceCriteriaIds ?? []).filter((criterionId) => {
-      const criterion = criteria.get(criterionId);
-      return !cited.some((evidence) => evidenceCovers(
-        evidence,
-        claimItem.id,
-        criterionId,
-        criterion,
-        snapshot.snapshotDigest,
-        reviewer.runId,
-      ));
+    if (!['verified', 'partially_verified'].includes(finding.verdict)) return finding;
+    const coverage = evaluateFindingCoverage({
+      claimItem,
+      criterionMap: criteria,
+      evidenceById,
+      finding,
+      snapshotDigest: snapshot.snapshotDigest,
+      reviewerRunId: reviewer.runId,
     });
-    if (uncovered.length > 0) {
+    if (finding.verdict === 'verified' && coverage.uncovered.length > 0) {
       return {
         ...finding,
         verdict: 'unsupported',
-        rationale: `${finding.rationale} Missing reviewer-produced evidence coverage for: ${uncovered.join(', ')}.`,
+        rationale: `${finding.rationale} Missing reviewer-produced evidence coverage for: ${coverage.uncovered.join(', ')}.`,
+      };
+    }
+    if (finding.verdict === 'partially_verified' && coverage.covered.length === 0) {
+      return {
+        ...finding,
+        verdict: 'unsupported',
+        rationale: `${finding.rationale} No referenced acceptance criterion has qualifying reviewer-produced evidence.`,
+      };
+    }
+    if (finding.verdict === 'partially_verified') {
+      return {
+        ...finding,
+        rationale: `${finding.rationale} Covered: ${coverage.covered.join(', ') || 'none'}; unresolved: ${coverage.uncovered.join(', ') || 'none'}.`,
       };
     }
     return finding;
   });
-  return finalizeReview({ claim, reviewer, snapshot, findings: hardenedFindings, reviewEvidence });
+
+  const review = finalizeReview({ claim, reviewer, snapshot, findings: hardenedFindings, reviewEvidence });
+  review.risks = Array.isArray(claim.risks) ? claim.risks : [];
+  review.unknowns = Array.isArray(claim.unknowns) ? claim.unknowns : [];
+  review.nextSteps = Array.isArray(claim.nextSteps) ? claim.nextSteps : [];
+  review.gate.status = computeStrictGateStatus(review.claims, review.findings);
+  review.artifactDigest = semanticDigest(review);
+  return review;
 }
 
 export function mergeReviewEvidence(results) {
