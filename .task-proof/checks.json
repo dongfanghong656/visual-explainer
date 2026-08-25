@@ -6,7 +6,7 @@
       "kind": "test",
       "command": "node",
       "args": [
-        "plugins/visual-explainer/task-proof/run-all-tests.mjs"
+        "plugins/visual-explainer/task-proof/run-all-tests-strict.mjs"
       ],
       "cwd": ".",
       "timeoutMs": 300000,

@@ -50,6 +50,7 @@ jobs:
           node --check plugins/visual-explainer/task-proof/artifact-store.mjs
           node --check plugins/visual-explainer/task-proof/mcp-server.mjs
           node --check plugins/visual-explainer/task-proof/run-all-tests.mjs
+          node --check plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
           node --check plugins/visual-explainer/task-proof/mcp-contract.mjs
           node --check plugins/visual-explainer/task-proof/mcp-handshake.mjs
       - name: Parse JSON schemas, policies, and examples
@@ -67,7 +68,7 @@ jobs:
       - name: Core and adversarial tests
         env:
           TASK_PROOF_ALLOW_EXECUTION: '1'
-        run: node plugins/visual-explainer/task-proof/run-all-tests.mjs
+        run: node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
 
   mcp-contract:
     runs-on: ubuntu-latest
