@@ -1,5 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readSync,
+  readlinkSync,
+  realpathSync,
+} from 'node:fs';
 import path from 'node:path';
 import {
   PROTOCOL_VERSION,
@@ -9,6 +18,8 @@ import {
 } from './core.mjs';
 
 const MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024;
+const MAX_WORKTREE_FILES = 2000;
+const MAX_WORKTREE_HASH_BYTES = 256 * 1024 * 1024;
 const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/i;
 
@@ -31,6 +42,10 @@ function git(root, args, { optional = false, encoding = 'utf8' } = {}) {
 function repositoryRoot(repositoryPath) {
   const requested = realpathSync(path.resolve(repositoryPath ?? '.'));
   return realpathSync(git(requested, ['rev-parse', '--show-toplevel']).trim());
+}
+
+function isInside(root, candidate) {
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
 function validateRef(root, ref) {
@@ -118,6 +133,72 @@ function recentCommits(root) {
   });
 }
 
+function safeWorktreePath(root, relativePath) {
+  if (typeof relativePath !== 'string' || relativePath === '' || path.isAbsolute(relativePath) || relativePath.includes('\0')) {
+    throw new TaskProofError('WORKTREE_PATH', 'Git reported an unsafe working-tree path.');
+  }
+  const lexical = path.resolve(root, relativePath);
+  if (!isInside(root, lexical)) throw new TaskProofError('WORKTREE_PATH_ESCAPE', 'Git working-tree path escapes the repository.');
+  return lexical;
+}
+
+function hashRegularFile(filename, budget) {
+  const descriptor = openSync(filename, 'r');
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  let size = 0;
+  try {
+    while (true) {
+      const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytes === 0) break;
+      size += bytes;
+      budget.bytes += bytes;
+      if (budget.bytes > MAX_WORKTREE_HASH_BYTES) {
+        throw new TaskProofError('WORKTREE_HASH_BUDGET', `Working-tree content exceeds the ${MAX_WORKTREE_HASH_BYTES}-byte fingerprint budget.`);
+      }
+      hash.update(buffer.subarray(0, bytes));
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+  return { size, digest: `sha256:${hash.digest('hex')}` };
+}
+
+function fingerprintWorkingTree(root, changes) {
+  if (changes.length > MAX_WORKTREE_FILES) {
+    throw new TaskProofError('WORKTREE_FILE_LIMIT', `Working tree has more than ${MAX_WORKTREE_FILES} changed or untracked files.`);
+  }
+  const budget = { bytes: 0 };
+  const incompleteReasons = [];
+  const fingerprints = changes.map((change) => {
+    const lexical = safeWorktreePath(root, change.path);
+    const base = { ...change };
+    if (!existsSync(lexical)) return { ...base, content: { kind: 'absent' } };
+    const stat = lstatSync(lexical);
+    if (stat.isSymbolicLink()) {
+      const target = readlinkSync(lexical);
+      return { ...base, content: { kind: 'symlink', targetDigest: sha256(target) } };
+    }
+    if (stat.isFile()) {
+      const physical = realpathSync(lexical);
+      if (!isInside(root, physical)) throw new TaskProofError('WORKTREE_PHYSICAL_ESCAPE', `Working-tree file escapes the repository: ${change.path}`);
+      return { ...base, content: { kind: 'file', ...hashRegularFile(physical, budget) } };
+    }
+    if (stat.isDirectory()) {
+      incompleteReasons.push(`Directory or submodule requires separate attestation: ${change.path}`);
+      return { ...base, content: { kind: 'directory', complete: false } };
+    }
+    incompleteReasons.push(`Unsupported filesystem object: ${change.path}`);
+    return { ...base, content: { kind: 'other', complete: false } };
+  });
+  return {
+    fingerprints,
+    complete: incompleteReasons.length === 0,
+    incompleteReasons,
+    hashedBytes: budget.bytes,
+  };
+}
+
 export function createRepositorySnapshotStrict({ repositoryPath = '.', baseRef } = {}) {
   const root = repositoryRoot(repositoryPath);
   const headSha = git(root, ['rev-parse', 'HEAD']).trim().toLowerCase();
@@ -126,11 +207,11 @@ export function createRepositorySnapshotStrict({ repositoryPath = '.', baseRef }
   const branch = (git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { optional: true }) ?? '').trim() || 'DETACHED';
   const remote = sanitizeRemote((git(root, ['config', '--get', 'remote.origin.url'], { optional: true }) ?? '').trim());
   const treeSha = git(root, ['rev-parse', 'HEAD^{tree}']).trim().toLowerCase();
-  const statusBuffer = git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=normal'], { encoding: null });
+  const statusBuffer = git(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], { encoding: null });
   const diffBuffer = git(root, ['diff', '--name-status', '-z', '--find-renames', `${baseSha}..${headSha}`], { encoding: null });
   const submodules = (git(root, ['submodule', 'status', '--recursive'], { optional: true }) ?? '').trim();
-  const workingTreeChanges = parsePorcelainV1Z(statusBuffer);
-  const committedChanges = parseNameStatusZ(diffBuffer);
+  const parsedWorkingTreeChanges = parsePorcelainV1Z(statusBuffer);
+  const workingTree = fingerprintWorkingTree(root, parsedWorkingTreeChanges);
   const repository = {
     repositoryName: path.basename(root),
     remote,
@@ -138,20 +219,22 @@ export function createRepositorySnapshotStrict({ repositoryPath = '.', baseRef }
     baseSha,
     headSha,
     treeSha,
-    dirty: workingTreeChanges.length > 0,
-    committedChanges,
-    workingTreeChanges,
+    dirty: workingTree.fingerprints.length > 0,
+    committedChanges: parseNameStatusZ(diffBuffer),
+    workingTreeChanges: workingTree.fingerprints,
+    workingTreeFingerprintComplete: workingTree.complete,
+    workingTreeFingerprintIncompleteReasons: workingTree.incompleteReasons,
+    workingTreeHashedBytes: workingTree.hashedBytes,
     recentCommits: recentCommits(root),
     submoduleStatusDigest: submodules ? sha256(submodules) : null,
   };
-  const snapshot = {
+  return {
     protocolVersion: PROTOCOL_VERSION,
     kind: SNAPSHOT_KIND,
     observedAt: new Date().toISOString(),
     repository,
     snapshotDigest: sha256(repository),
   };
-  return snapshot;
 }
 
 export function validateRepositorySnapshotStrict(snapshot) {
@@ -164,6 +247,7 @@ export function validateRepositorySnapshotStrict(snapshot) {
   if (!FULL_SHA_RE.test(snapshot.repository?.baseSha ?? '')) errors.push({ code: 'BASE_SHA', message: 'Snapshot requires a full base SHA.' });
   if (!FULL_SHA_RE.test(snapshot.repository?.headSha ?? '')) errors.push({ code: 'HEAD_SHA', message: 'Snapshot requires a full head SHA.' });
   if (!FULL_SHA_RE.test(snapshot.repository?.treeSha ?? '')) errors.push({ code: 'TREE_SHA', message: 'Snapshot requires a full tree SHA.' });
+  if (typeof snapshot.repository?.workingTreeFingerprintComplete !== 'boolean') errors.push({ code: 'WORKTREE_FINGERPRINT', message: 'Snapshot must state whether working-tree fingerprinting is complete.' });
   if (!DIGEST_RE.test(snapshot.snapshotDigest ?? '')) errors.push({ code: 'SNAPSHOT_DIGEST', message: 'Snapshot requires a SHA-256 digest.' });
   const expectedDigest = snapshot.repository && typeof snapshot.repository === 'object' ? sha256(snapshot.repository) : undefined;
   if (expectedDigest && snapshot.snapshotDigest !== expectedDigest) errors.push({ code: 'SNAPSHOT_TAMPERED', message: 'Snapshot digest does not match repository payload.' });
