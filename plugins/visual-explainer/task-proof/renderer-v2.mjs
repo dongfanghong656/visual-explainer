@@ -117,7 +117,7 @@ function remainingItems(artifact, isReview, findings) {
   for (const claim of artifact.claims ?? []) {
     const finding = findings.get(claim.id);
     const state = isReview ? (finding?.verdict ?? 'unsupported') : claim.declaredStatus;
-    const complete = isReview ? state === 'verified' : state === 'declared_done';
+    const complete = isReview ? state === 'verified' : claim.declaredStatus === 'declared_done';
     if (!complete) items.push(`${claim.id} · ${state}: ${claim.statement}`);
   }
   for (const value of artifact.nextSteps ?? []) items.push(`NEXT · ${itemText(value)}`);
@@ -145,18 +145,18 @@ function claimCards(artifact, isReview, findings) {
     const state = isReview ? (finding?.verdict ?? 'unsupported') : claim.declaredStatus;
     const evidenceIds = isReview ? (finding?.reviewEvidenceIds ?? []) : (claim.evidenceIds ?? []);
     const criterionIds = claim.acceptanceCriteriaIds ?? [];
-    const y = 154 + index * 144;
-    const statement = wrap(claim.statement, 58, 3);
+    const y = 154 + index * 142;
+    const statement = wrap(claim.statement, 58, 2);
     const metadata = [
       `criteria: ${criterionIds.length ? criterionIds.join(', ') : 'none'}`,
       `evidence: ${evidenceIds.length ? evidenceIds.join(', ') : 'none'}`,
     ];
-    return `<g><rect x="490" y="${y}" width="620" height="126" rx="15" fill="${COLORS.panel}" stroke="${statusColor(state)}" stroke-width="2"/><rect x="510" y="${y + 18}" width="146" height="28" rx="14" fill="${statusColor(state)}"/><text x="583" y="${y + 38}" text-anchor="middle" font-size="14" font-weight="800" fill="${COLORS.background}">${xmlEscape(state)}</text>${textBlock(674, y + 38, [claim.id], { size: 18, weight: 800 })}${textBlock(514, y + 70, statement, { size: 17, lineHeight: 22 })}${textBlock(514, y + 112, metadata, { size: 13, lineHeight: 17, fill: COLORS.muted })}</g>`;
+    return `<g><rect x="490" y="${y}" width="620" height="136" rx="15" fill="${COLORS.panel}" stroke="${statusColor(state)}" stroke-width="2"/><rect x="510" y="${y + 18}" width="146" height="28" rx="14" fill="${statusColor(state)}"/><text x="583" y="${y + 38}" text-anchor="middle" font-size="14" font-weight="800" fill="${COLORS.background}">${xmlEscape(state)}</text>${textBlock(674, y + 38, [claim.id], { size: 18, weight: 800 })}${textBlock(514, y + 70, statement, { size: 17, lineHeight: 22 })}${textBlock(514, y + 112, metadata, { size: 13, lineHeight: 16, fill: COLORS.muted })}</g>`;
   }).join('');
 }
 
 function causalSection(x, y, label, items, accent) {
-  const lines = bulletLines(items.length ? items : ['Not recorded.'], 34, 7);
+  const lines = bulletLines(items.length ? items : ['Not recorded.'], 34, 4);
   return `<g><text x="${x}" y="${y}" font-size="17" font-weight="800" fill="${accent}">${xmlEscape(label)}</text>${textBlock(x, y + 28, lines, { size: 15, lineHeight: 20, fill: COLORS.muted })}</g>`;
 }
 
@@ -173,13 +173,17 @@ export function renderTaskProofSvgV2(artifact) {
   const after = normalizeFlow(artifact.change?.after ?? artifact.change?.newFlow);
   const remaining = remainingItems(artifact, isReview, findings);
   const evidence = (isReview ? artifact.reviewEvidence : artifact.evidence) ?? [];
-  const evidenceLines = evidence.slice(0, 6).map((entry) => `${entry.id} · ${entry.kind} · ${compact(entry.locator, 38)}`);
+  const evidenceLines = evidence.slice(0, 2).map((entry) => `${entry.id} · ${entry.kind} · ${compact(entry.locator, 38)}`);
   const omittedClaims = Math.max(0, (artifact.claims?.length ?? 0) - 4);
   if (omittedClaims > 0) remaining.unshift(`${omittedClaims} additional claim(s) are present in JSON but omitted from this one-screen view.`);
   const digest = artifact.artifactDigest ?? 'digest unavailable';
   const proofBoundary = isReview
     ? `Gate ${gate} is valid only for claim ${compact(artifact.claimDigest, 36)} and snapshot ${compact(artifact.repository?.snapshotDigest, 36)}.`
     : 'This is a claimant declaration. A different run must reproduce criterion-level evidence before completion can be verified.';
+  const proofLines = [
+    ...bulletLines(evidenceLines, 40, 2),
+    ...wrap(proofBoundary, 42, 3),
+  ].slice(0, 5);
   const alt = [
     `${isReview ? 'Independent review' : 'Unverified claim'} for ${artifact.task?.title ?? artifact.id}.`,
     `Status ${gate}. Objective: ${objective}. Change: ${thesis}.`,
@@ -190,5 +194,5 @@ export function renderTaskProofSvgV2(artifact) {
     `Remaining: ${remaining.length ? remaining.join('; ') : 'none recorded'}.`,
   ].join(' ');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="task-proof-title task-proof-desc"><title id="task-proof-title">${xmlEscape(artifact.task?.title ?? 'Task Proof')}</title><desc id="task-proof-desc">${xmlEscape(alt)}</desc><rect width="1600" height="900" fill="${COLORS.background}"/><rect x="0" y="0" width="1600" height="92" fill="${COLORS.header}"/><text x="40" y="42" font-size="29" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'TASK PROOF · INDEPENDENT REVIEW' : 'TASK PROOF · CLAIM')}</text><text x="40" y="70" font-size="15" fill="${COLORS.muted}">${xmlEscape(artifact.task?.id ?? artifact.id)} · ${xmlEscape(artifact.repository?.branch ?? 'unknown branch')} · ${xmlEscape((artifact.repository?.headSha ?? '').slice(0, 12))}</text><rect x="1315" y="23" width="245" height="46" rx="23" fill="${statusColor(gate)}"/><text x="1437" y="53" text-anchor="middle" font-size="20" font-weight="850" fill="${COLORS.background}">${xmlEscape(gate)}</text>${panel(40, 116, 430, 146, 'Objective', wrap(objective, 42, 4), COLORS.blue)}${panel(40, 278, 430, 176, 'Change thesis', wrap(thesis, 42, 5), COLORS.violet)}${panel(40, 470, 430, 290, 'Remaining · blocked · risk', bulletLines(remaining, 42, 10), remaining.length ? COLORS.amber : COLORS.green)}<text x="490" y="132" font-size="21" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'Reviewed completion claims' : 'Declared completion claims')}</text>${claimCards(artifact, isReview, findings)}<rect x="1130" y="116" width="430" height="462" rx="16" fill="${COLORS.panelAlt}" stroke="${COLORS.border}" stroke-width="1.5"/><text x="1154" y="151" font-size="21" font-weight="850" fill="${COLORS.text}">Causal change logic</text>${causalSection(1154, 188, 'BEFORE · failure chain', before, COLORS.red)}${causalSection(1154, 330, 'CHANGE · mechanism', [thesis], COLORS.violet)}${causalSection(1154, 465, 'AFTER · resulting behavior', after, COLORS.green)}${panel(1130, 594, 430, 166, 'Evidence and proof boundary', [...bulletLines(evidenceLines, 40, 4), ...wrap(proofBoundary, 42, 4)], statusColor(gate))}<rect x="40" y="790" width="1520" height="72" rx="14" fill="${COLORS.header}"/><text x="64" y="818" font-size="14" fill="${COLORS.muted}">Artifact digest</text><text x="64" y="844" font-size="16" font-family="monospace" fill="${COLORS.text}">${xmlEscape(digest)}</text><text x="1534" y="821" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(`${artifact.claims?.length ?? 0} claim(s) · ${evidence.length} evidence item(s)`)}</text><text x="1534" y="846" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(isReview ? 'JSON + receipts are the fact source.' : 'Claimant output is never self-verifying.')}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="task-proof-title task-proof-desc"><title id="task-proof-title">${xmlEscape(artifact.task?.title ?? 'Task Proof')}</title><desc id="task-proof-desc">${xmlEscape(alt)}</desc><rect width="1600" height="900" fill="${COLORS.background}"/><rect x="0" y="0" width="1600" height="92" fill="${COLORS.header}"/><text x="40" y="42" font-size="29" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'TASK PROOF · INDEPENDENT REVIEW' : 'TASK PROOF · CLAIM')}</text><text x="40" y="70" font-size="15" fill="${COLORS.muted}">${xmlEscape(artifact.task?.id ?? artifact.id)} · ${xmlEscape(artifact.repository?.branch ?? 'unknown branch')} · ${xmlEscape((artifact.repository?.headSha ?? '').slice(0, 12))}</text><rect x="1315" y="23" width="245" height="46" rx="23" fill="${statusColor(gate)}"/><text x="1437" y="53" text-anchor="middle" font-size="20" font-weight="850" fill="${COLORS.background}">${xmlEscape(gate)}</text>${panel(40, 116, 430, 146, 'Objective', wrap(objective, 42, 4), COLORS.blue)}${panel(40, 278, 430, 176, 'Change thesis', wrap(thesis, 42, 5), COLORS.violet)}${panel(40, 470, 430, 290, 'Remaining · blocked · risk', bulletLines(remaining, 42, 10), remaining.length ? COLORS.amber : COLORS.green)}<text x="490" y="132" font-size="21" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'Reviewed completion claims' : 'Declared completion claims')}</text>${claimCards(artifact, isReview, findings)}<rect x="1130" y="116" width="430" height="462" rx="16" fill="${COLORS.panelAlt}" stroke="${COLORS.border}" stroke-width="1.5"/><text x="1154" y="151" font-size="21" font-weight="850" fill="${COLORS.text}">Causal change logic</text>${causalSection(1154, 188, 'BEFORE · failure chain', before, COLORS.red)}${causalSection(1154, 322, 'CHANGE · mechanism', [thesis], COLORS.violet)}${causalSection(1154, 456, 'AFTER · resulting behavior', after, COLORS.green)}${panel(1130, 594, 430, 166, 'Evidence and proof boundary', proofLines, statusColor(gate))}<rect x="40" y="790" width="1520" height="72" rx="14" fill="${COLORS.header}"/><text x="64" y="818" font-size="14" fill="${COLORS.muted}">Artifact digest</text><text x="64" y="844" font-size="16" font-family="monospace" fill="${COLORS.text}">${xmlEscape(digest)}</text><text x="1534" y="821" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(`${artifact.claims?.length ?? 0} claim(s) · ${evidence.length} evidence item(s)`)}</text><text x="1534" y="846" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(isReview ? 'JSON + receipts are the fact source.' : 'Claimant output is never self-verifying.')}</text></svg>`;
 }
