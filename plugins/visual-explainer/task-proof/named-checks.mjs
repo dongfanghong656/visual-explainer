@@ -3,10 +3,12 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import {
   TaskProofError,
-  createRepositorySnapshot,
   sha256,
-  validateSnapshot,
 } from './core.mjs';
+import {
+  createRepositorySnapshotStrict as createRepositorySnapshot,
+  validateRepositorySnapshotStrict as validateSnapshot,
+} from './snapshot.mjs';
 
 const POLICY_PATH = '.task-proof/checks.json';
 const RECEIPT_ISSUER = 'visual-explainer-task-proof-mcp';
@@ -46,13 +48,6 @@ function isInside(root, candidate) {
   return candidate === root || candidate.startsWith(`${root}${path.sep}`);
 }
 
-function rootFromSnapshot(repositoryPath) {
-  const requested = realpathSync(path.resolve(repositoryPath ?? '.'));
-  const snapshot = createRepositorySnapshot({ repositoryPath: requested });
-  const root = realpathSync(requested);
-  return { requested: root, snapshot };
-}
-
 function actualRepositoryRoot(repositoryPath) {
   const requested = realpathSync(path.resolve(repositoryPath ?? '.'));
   const result = spawnSync('git', ['-C', requested, 'rev-parse', '--show-toplevel'], {
@@ -66,7 +61,8 @@ function loadPolicy(root) {
   const lexical = path.resolve(root, POLICY_PATH);
   if (!isInside(root, lexical)) throw new TaskProofError('POLICY_ESCAPE', 'Named-check policy escaped the repository.');
   let stat;
-  try { stat = lstatSync(lexical); } catch { throw new TaskProofError('CHECK_POLICY_MISSING', `Missing ${POLICY_PATH}.`); }
+  try { stat = lstatSync(lexical); }
+  catch { throw new TaskProofError('CHECK_POLICY_MISSING', `Missing ${POLICY_PATH}.`); }
   if (stat.isSymbolicLink() || !stat.isFile()) throw new TaskProofError('CHECK_POLICY_FILE', 'Named-check policy must be a regular non-symlink file.');
   if (stat.size > MAX_POLICY_BYTES) throw new TaskProofError('CHECK_POLICY_LARGE', 'Named-check policy is too large.');
   const physical = realpathSync(lexical);
@@ -145,6 +141,11 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
     const evidenceId = ensureId(request.id, `check request ${index}`);
     if (seenEvidenceIds.has(evidenceId)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate check evidence id: ${evidenceId}`);
     seenEvidenceIds.add(evidenceId);
+    const supportsClaimIds = uniqueIds(request.supportsClaimIds, 'supportsClaimIds');
+    const supportsCriterionIds = uniqueIds(request.supportsCriterionIds, 'supportsCriterionIds');
+    if (supportsClaimIds.length === 0 || supportsCriterionIds.length === 0) {
+      throw new TaskProofError('UNBOUND_EVIDENCE', `Named check evidence ${evidenceId} must support at least one claim and one criterion.`);
+    }
     const definition = definitions.get(request.checkId);
     if (!definition) throw new TaskProofError('UNKNOWN_CHECK', `Named check is not allowlisted: ${request.checkId}`);
 
@@ -204,8 +205,8 @@ export function runNamedChecksStrict({ repositoryPath = '.', reviewerRunId, requ
         snapshotDigest: before.snapshotDigest,
         evidenceId,
         observation,
-        supportsClaimIds: request.supportsClaimIds,
-        supportsCriterionIds: request.supportsCriterionIds,
+        supportsClaimIds,
+        supportsCriterionIds,
       }),
     };
   });
