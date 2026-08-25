@@ -5,7 +5,9 @@ on:
     paths:
       - '.github/workflows/task-proof.yml'
       - '.task-proof/**'
+      - 'TASK_PROOF.md'
       - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/skills/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
       - 'docs/task-proof/**'
   push:
@@ -16,7 +18,9 @@ on:
     paths:
       - '.github/workflows/task-proof.yml'
       - '.task-proof/**'
+      - 'TASK_PROOF.md'
       - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/skills/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
       - 'docs/task-proof/**'
 
@@ -39,8 +43,15 @@ jobs:
       - name: Syntax check
         run: |
           node --check plugins/visual-explainer/task-proof/core.mjs
+          node --check plugins/visual-explainer/task-proof/snapshot.mjs
           node --check plugins/visual-explainer/task-proof/hardening.mjs
+          node --check plugins/visual-explainer/task-proof/named-checks.mjs
+          node --check plugins/visual-explainer/task-proof/renderer-v2.mjs
+          node --check plugins/visual-explainer/task-proof/artifact-store.mjs
           node --check plugins/visual-explainer/task-proof/mcp-server.mjs
+          node --check plugins/visual-explainer/task-proof/run-all-tests.mjs
+          node --check plugins/visual-explainer/task-proof/mcp-contract.mjs
+          node --check plugins/visual-explainer/task-proof/mcp-handshake.mjs
       - name: Parse JSON schemas, policies, and examples
         run: |
           node - <<'NODE'
@@ -56,7 +67,7 @@ jobs:
       - name: Core and adversarial tests
         env:
           TASK_PROOF_ALLOW_EXECUTION: '1'
-        run: node --test plugins/visual-explainer/task-proof/*.test.mjs
+        run: node plugins/visual-explainer/task-proof/run-all-tests.mjs
 
   mcp-contract:
     runs-on: ubuntu-latest
@@ -68,20 +79,7 @@ jobs:
           node-version: '20'
       - name: Install declared dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Import MCP server and verify tool contract
-        run: |
-          node --input-type=module - <<'NODE'
-          const module = await import('./plugins/visual-explainer/task-proof/mcp-server.mjs');
-          const names = module.TOOL_DEFINITIONS.map((tool) => tool.name);
-          for (const expected of [
-            'task_proof_snapshot',
-            'task_proof_probe',
-            'task_proof_run_checks',
-            'task_proof_validate_claim',
-            'task_proof_claim',
-            'task_proof_review'
-          ]) {
-            if (!names.includes(expected)) throw new Error(`Missing MCP tool: ${expected}`);
-          }
-          if (new Set(names).size !== names.length) throw new Error('Duplicate MCP tool name');
-          NODE
+      - name: Import MCP server and verify tool definitions
+        run: node plugins/visual-explainer/task-proof/mcp-contract.mjs
+      - name: Verify stdio client-server handshake and snapshot tool
+        run: node plugins/visual-explainer/task-proof/mcp-handshake.mjs
