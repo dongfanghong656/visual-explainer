@@ -5,6 +5,7 @@ import {
   TaskProofError,
   finalizeReview,
   sha256,
+  validateClaim,
 } from './core.mjs';
 import {
   createRepositorySnapshotStrict as createRepositorySnapshot,
@@ -329,9 +330,21 @@ export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [],
       reasons: snapshot.repository.workingTreeFingerprintIncompleteReasons ?? [],
     });
   }
-  if (!isRecord(reviewer) || reviewer.runId === claim?.producer?.runId) {
+  if (!isRecord(reviewer) || reviewer.role !== 'reviewer') {
+    throw new TaskProofError('REVIEWER_ROLE', 'reviewer.role must be reviewer.');
+  }
+  if (reviewer.runId === claim?.producer?.runId) {
     throw new TaskProofError('NOT_INDEPENDENT', 'Reviewer runId must differ from claimant runId.');
   }
+
+  const claimValidation = validateClaim(claim);
+  const suppliedArtifactDigest = claim?.artifactDigest;
+  if (!claimValidation.ok
+    || (suppliedArtifactDigest !== undefined && suppliedArtifactDigest !== claimValidation.digest)) {
+    throw new TaskProofError('INVALID_CLAIM', 'Claim validation or artifact digest verification failed.', claimValidation);
+  }
+
+  const claimIds = new Set((claim.claims ?? []).map((item) => item.id));
   const evidenceById = new Map();
   for (const evidence of reviewEvidence) {
     if (evidenceById.has(evidence.id)) throw new TaskProofError('DUPLICATE_EVIDENCE', `Duplicate review evidence id: ${evidence.id}`);
@@ -340,6 +353,9 @@ export function finalizeReviewStrict({ claim, reviewer, snapshot, findings = [],
   const criteria = criterionMap(claim);
   const submitted = new Map();
   for (const finding of findings) {
+    if (!claimIds.has(finding.claimId)) {
+      throw new TaskProofError('UNKNOWN_FINDING', `Finding references an unknown claim: ${finding.claimId}`);
+    }
     if (submitted.has(finding.claimId)) throw new TaskProofError('DUPLICATE_FINDING', `Duplicate finding for claim: ${finding.claimId}`);
     submitted.set(finding.claimId, finding);
   }

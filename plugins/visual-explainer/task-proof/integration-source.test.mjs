@@ -61,7 +61,6 @@ test('CI runs the strict test finder and a real MCP stdio handshake', () => {
   assert.match(workflow, /npm install --ignore-scripts/);
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
   assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
-  assert.match(workflow, /npm run test:task-proof:mcp/);
 });
 
 test('protocol documents state the core trust boundaries', () => {

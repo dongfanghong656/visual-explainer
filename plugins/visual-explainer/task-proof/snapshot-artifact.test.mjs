@@ -154,7 +154,7 @@ test('review writer recomputes gate and validates every receipt', () => {
   assert.equal(validateReviewArtifact(review).ok, false);
 });
 
-test('artifact output rejects a symlinked output root', () => {
+test('artifact output rejects a symlinked output root', { skip: process.platform === 'win32' }, () => {
   const repo = repository();
   const outside = mkdtempSync(path.join(os.tmpdir(), 'task-proof-output-outside-'));
   mkdirSync(path.join(repo, '.artifacts'));

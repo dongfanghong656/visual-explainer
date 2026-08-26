@@ -100,7 +100,7 @@ test('criterion evidence policy rejects unknown or duplicate kinds', () => {
   assert.ok(result.errors.some((item) => item.code === 'REQUIRED_EVIDENCE_KIND'));
 });
 
-test('strict file probe rejects parent-directory symlink escape', () => {
+test('strict file probe rejects parent-directory symlink escape', { skip: process.platform === 'win32' }, () => {
   const repo = repository();
   const outside = mkdtempSync(path.join(os.tmpdir(), 'task-proof-outside-'));
   writeFileSync(path.join(outside, 'secret.txt'), 'secret\n');

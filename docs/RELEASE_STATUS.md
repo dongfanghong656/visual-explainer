@@ -6,7 +6,7 @@
 - Release state: PROVISIONAL
 - Release decision: BLOCKED
 - Tag/release: none
-- Branch: `chat/task-proof-visualizer/v0.1.0`
+- Branch: `chat/task-proof-visualizer/v0.1.0-recovery`
 - Base revision: `df35d97a00191d8aba831e757a65dd6ce0514fc0`
 - Candidate commit: `PENDING_SELF_REFERENCE`
 
@@ -22,9 +22,9 @@
 
 ## Release blockers
 
-1. Clean dependency installation and real MCP stdio handshake are not evidenced.
+1. The exact repair revision has not yet passed the GitHub Linux Node 20/22 matrix.
 2. A separate reviewer has not accepted a real author claim for the exact candidate commit.
-3. Multi-host compatibility is not assessed.
+3. Multi-host compatibility is only partially assessed.
 4. RSK-0003 requires a fix or explicit alpha acceptance decision.
 
 ## Promotion requirements

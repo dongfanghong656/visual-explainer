@@ -6,7 +6,7 @@
     "owner": "dongfanghong656",
     "name": "visual-explainer",
     "defaultBranch": "main",
-    "managedBranch": "chat/task-proof-visualizer/v0.1.0"
+    "managedBranch": "chat/task-proof-visualizer/v0.1.0-recovery"
   },
   "authorityPaths": {
     "agentContract": "PROJECT_AGENT.md",
@@ -27,10 +27,10 @@
   "milestone": "v0.11.0-alpha.1 development candidate",
   "sync": {
     "status": "SYNCED",
-    "baseRevision": "df35d97a00191d8aba831e757a65dd6ce0514fc0",
+    "baseRevision": "16c640b1fc6873a6d1381c874365a8bb42011946",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
-    "latestTurn": "TURN-0001",
-    "latestCheckpoint": "CHK-0001",
+    "latestTurn": "TURN-0002",
+    "latestCheckpoint": "CHK-0002",
     "pendingSelfReference": true
   },
   "counters": {
@@ -38,11 +38,11 @@
     "spec": 2,
     "task": 6,
     "artifact": 6,
-    "evidence": 6,
+    "evidence": 7,
     "decision": 5,
     "risk": 5,
-    "checkpoint": 2,
-    "turn": 2,
+    "checkpoint": 3,
+    "turn": 3,
     "release": 2
   },
   "active": {
@@ -79,10 +79,10 @@
   "gates": {
     "developmentAcceptance": "BLOCKED",
     "release": "BLOCKED",
-    "reason": "Core modules are tested, but the full MCP stdio workflow has not been executed in a clean dependency-installed environment."
+    "reason": "Local strict tests and the MCP stdio snapshot handshake pass; exact-revision Linux CI and independent review remain pending."
   },
   "blockers": [
     "RSK-0001"
   ],
-  "nextAction": "Install the declared Node dependencies in a clean checkout and run an end-to-end MCP stdio author/reviewer handshake against a real repository."
+  "nextAction": "Confirm the exact repair revision passes draft PR #2 on Linux Node 20/22, then run an independent reviewer pass."
 }

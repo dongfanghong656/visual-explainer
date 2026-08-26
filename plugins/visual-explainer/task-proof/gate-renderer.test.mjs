@@ -163,7 +163,7 @@ test('partial plus not-applicable declared-done claim is INCONCLUSIVE, not PASS_
   assert.equal(computeStrictGateStatus(claims, findings), 'INCONCLUSIVE');
 });
 
-test('changed_path supports a filename containing a newline', () => {
+test('changed_path supports a filename containing a newline', { skip: process.platform === 'win32' }, () => {
   const repo = repository();
   const weird = 'line\nbreak.txt';
   writeFileSync(path.join(repo, weird), 'value\n');
@@ -181,7 +181,7 @@ test('changed_path supports a filename containing a newline', () => {
   assert.equal(result.evidence[0].result.exitCode, 0);
 });
 
-test('parent output symlink is rejected before creating directories outside the repository', () => {
+test('parent output symlink is rejected before creating directories outside the repository', { skip: process.platform === 'win32' }, () => {
   const repo = repository();
   const outside = mkdtempSync(path.join(os.tmpdir(), 'task-proof-parent-output-'));
   symlinkSync(outside, path.join(repo, '.artifacts'));

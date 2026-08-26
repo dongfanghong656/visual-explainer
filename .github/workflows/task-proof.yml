@@ -14,8 +14,6 @@ on:
   push:
     branches:
       - main
-      - 'chat/task-proof-**'
-      - 'stage/task-proof-**'
     paths:
       - '.github/workflows/task-proof.yml'
       - '.task-proof/**'
@@ -59,6 +57,6 @@ jobs:
       - name: Run core and adversarial tests
         env:
           TASK_PROOF_ALLOW_EXECUTION: '1'
-        run: npm run test:task-proof
+        run: node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
       - name: Verify MCP tool contract and real stdio handshake
-        run: npm run test:task-proof:mcp
+        run: node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs

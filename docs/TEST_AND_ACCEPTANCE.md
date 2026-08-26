@@ -9,6 +9,7 @@
 | EVD-0003 | JSON parsing and Draft 2020-12 schema validation of state/schema/examples | PASS | Python JSON tooling/jsonschema in current container | Examples and project state only; not exhaustive schema/validator equivalence |
 | EVD-0004 | Deterministic HTML generation and Chromium visual/overflow inspection | PASS | system Chromium via Playwright `set_content`, viewport 1440×1000 | claim/review examples; full heights 4562/4714 px; no horizontal overflow or console/page errors; reviewer shows 10/10 logic subjects. Local PNG SHA-256: claim `5f184351…`, review `3a5f2cc3…`; one browser/environment |
 | EVD-0005 | Secret-oriented source scan and package-content consistency checks | PASS | 57 UTF-8 candidate files; `npm pack --dry-run --json` | 0 matches for private-key/token/credential patterns; package dry-run included 22 files and every required Task Proof runtime/command file. Local pattern scan is not a platform-wide security review |
+| EVD-0006 | `npm run verify:task-proof` after CI repair | PASS | Windows; Node 24.14.1; isolated Git repository; 2026-08-26 | Syntax/JSON checks pass; 54 tests pass, 0 fail, 4 Windows-only capability skips; six MCP tools and a real stdio snapshot handshake pass. Linux Node 20/22 CI remains required for remote acceptance |
 
 ## Automated cases
 
@@ -39,9 +40,9 @@ The Node suite covers:
 | G6 Traceability | PASS for development / FAIL for release | traceability matrix | Release evidence chain incomplete |
 | G7 Artifact honesty | PASS | artifact registry | ART-0004 remains STATIC_CHECKED |
 | G8 Evidence validity | PASS | EVD-0001–EVD-0005 | Controlled/synthetic/local limits recorded |
-| G9 Release readiness | BLOCKED | RSK-0001; TASK-0005 | No clean-install MCP E2E or independent candidate review |
-| G10 Turn transaction | PENDING until remote readback | TURN-0001 manifest | Must verify commit/state/turn after push |
+| G9 Release readiness | BLOCKED | EVD-0006; TASK-0005 | Local MCP E2E now passes; Linux matrix and independent candidate review remain |
+| G10 Turn transaction | PENDING until remote readback | TURN-0002 | Must verify exact commit/state/turn after push |
 
 ## Current acceptance conclusion
 
-Core Task Proof modules are a tested development candidate. The integrated Skill/MCP package is not yet user-usable, release-ready, or released. The release gate remains `BLOCKED` by the missing clean-install MCP handshake, independent real-candidate review, multi-host evidence, and an unresolved decision on RSK-0003.
+Core Task Proof modules and the local MCP stdio path are a tested development candidate. The package is not yet release-ready or released. The release gate remains `BLOCKED` by the pending Linux Node 20/22 run, independent real-candidate review, broader host evidence, and an unresolved decision on RSK-0003.
