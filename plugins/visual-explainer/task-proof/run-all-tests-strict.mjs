@@ -7,7 +7,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const tests = readdirSync(directory, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith('.test.mjs'))
   .map((entry) => path.join(directory, entry.name))
-  .sort((left, right) => left.localeCompare(right, 'en'));
+  .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
 
 if (tests.length === 0) {
   console.error('Task Proof strict test runner found no *.test.mjs files.');

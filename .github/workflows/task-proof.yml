@@ -6,6 +6,7 @@ on:
       - '.github/workflows/task-proof.yml'
       - '.task-proof/**'
       - 'TASK_PROOF.md'
+      - 'package.json'
       - 'plugins/visual-explainer/task-proof/**'
       - 'plugins/visual-explainer/skills/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/task-proof.yml'
       - '.task-proof/**'
       - 'TASK_PROOF.md'
+      - 'package.json'
       - 'plugins/visual-explainer/task-proof/**'
       - 'plugins/visual-explainer/skills/task-proof/**'
       - 'plugins/visual-explainer/commands/task-proof*.md'
@@ -32,55 +34,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  protocol-and-core:
+  verify:
+    name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '20'
-      - name: Syntax check
-        run: |
-          node --check plugins/visual-explainer/task-proof/core.mjs
-          node --check plugins/visual-explainer/task-proof/snapshot.mjs
-          node --check plugins/visual-explainer/task-proof/hardening.mjs
-          node --check plugins/visual-explainer/task-proof/named-checks.mjs
-          node --check plugins/visual-explainer/task-proof/renderer-v2.mjs
-          node --check plugins/visual-explainer/task-proof/artifact-store.mjs
-          node --check plugins/visual-explainer/task-proof/mcp-server.mjs
-          node --check plugins/visual-explainer/task-proof/run-all-tests.mjs
-          node --check plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
-          node --check plugins/visual-explainer/task-proof/mcp-contract.mjs
-          node --check plugins/visual-explainer/task-proof/mcp-handshake.mjs
-      - name: Parse JSON schemas, policies, and examples
-        run: |
-          node - <<'NODE'
-          const fs = require('node:fs');
-          for (const filename of [
-            'plugins/visual-explainer/task-proof/task-proof.schema.json',
-            '.task-proof/checks.json',
-            'plugins/visual-explainer/task-proof/examples/scroll-restoration.review.json'
-          ]) {
-            if (fs.existsSync(filename)) JSON.parse(fs.readFileSync(filename, 'utf8'));
-          }
-          NODE
-      - name: Core and adversarial tests
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install declared dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-audit --no-fund --no-package-lock
+      - name: Verify syntax and machine-readable contracts
+        run: npm run check:task-proof
+      - name: Run core and adversarial tests
         env:
           TASK_PROOF_ALLOW_EXECUTION: '1'
-        run: node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
-
-  mcp-contract:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install declared dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
-      - name: Import MCP server and verify tool definitions
-        run: node plugins/visual-explainer/task-proof/mcp-contract.mjs
-      - name: Verify stdio client-server handshake and snapshot tool
-        run: node plugins/visual-explainer/task-proof/mcp-handshake.mjs
+        run: npm run test:task-proof
+      - name: Verify MCP tool contract and real stdio handshake
+        run: npm run test:task-proof:mcp

@@ -59,6 +59,9 @@ test('CI runs the strict test finder and a real MCP stdio handshake', () => {
   assert.match(workflow, /run-all-tests-strict\.mjs/);
   assert.match(workflow, /mcp-handshake\.mjs/);
   assert.match(workflow, /npm install --ignore-scripts/);
+  assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
+  assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
+  assert.match(workflow, /npm run test:task-proof:mcp/);
 });
 
 test('protocol documents state the core trust boundaries', () => {
@@ -74,10 +77,14 @@ test('protocol documents state the core trust boundaries', () => {
   assert.match(mcp, /arbitrary command/i);
 });
 
-test('package declares the MCP SDK used by the dedicated server', () => {
+test('package declares the split MCP v2 server/client packages and exposes the dedicated binary', () => {
   const packageJson = parse('package.json');
-  const version = packageJson.dependencies?.['@modelcontextprotocol/sdk']
-    ?? packageJson.devDependencies?.['@modelcontextprotocol/sdk'];
-  assert.equal(typeof version, 'string');
-  assert.ok(version.length > 0);
+  assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/server'], 'string');
+  assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/client'], 'string');
+  assert.equal(packageJson.dependencies?.['@modelcontextprotocol/sdk'], undefined);
+  assert.equal(
+    packageJson.bin?.['visual-explainer-task-proof-mcp'],
+    './plugins/visual-explainer/task-proof/mcp-server.mjs',
+  );
+  assert.equal(packageJson.engines?.node, '>=20');
 });

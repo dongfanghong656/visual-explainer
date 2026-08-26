@@ -50,9 +50,11 @@
   ],
   "bin": {
     "visual-explainer-mcp": "./plugins/visual-explainer/mcp/server.mjs",
-    "visual-explainer-pptx": "./plugins/visual-explainer/pptx/export.mjs"
+    "visual-explainer-pptx": "./plugins/visual-explainer/pptx/export.mjs",
+    "visual-explainer-task-proof-mcp": "./plugins/visual-explainer/task-proof/mcp-server.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "node-html-parser": "^9.0.1",
     "pptxgenjs": "^4.0.1",
@@ -74,7 +76,12 @@
     "image": "./banner.png"
   },
   "scripts": {
-    "test:task-proof": "node --test plugins/visual-explainer/task-proof/*.test.mjs",
-    "check:task-proof": "node --check plugins/visual-explainer/task-proof/validation.mjs && node --check plugins/visual-explainer/task-proof/git-snapshot.mjs && node --check plugins/visual-explainer/task-proof/render.mjs && node --check plugins/visual-explainer/mcp/server.mjs && npm run test:task-proof"
+    "check:task-proof": "node plugins/visual-explainer/task-proof/verify-source.mjs",
+    "test:task-proof": "node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs",
+    "test:task-proof:mcp": "node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs",
+    "verify:task-proof": "npm run check:task-proof && npm run test:task-proof && npm run test:task-proof:mcp"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

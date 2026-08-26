@@ -1,24 +1,57 @@
 # Task Proof extension
 
-This directory adds evidence-gated completion diagrams to visual-explainer.
+Task Proof adds evidence-gated completion diagrams to visual-explainer. It deliberately separates an implementing AI's declaration from an independent review.
 
-## MCP tools
+## Stable workflow
 
-- `task_proof_git_snapshot` — read-only Git scope and worktree digest.
-- `task_proof_validate_claim` — validate an author declaration.
-- `task_proof_render_claim` — validate, persist JSON, and render the author diagram.
-- `task_proof_validate_review` — validate an independent review against its claim.
-- `task_proof_render_review` — validate, persist JSON, and render the reviewer verdict.
+1. The claimant calls `task_proof_snapshot`, reconstructs the task contract, and submits a semantic claim with `task_proof_claim`.
+2. The claimant artifact is always marked `UNVERIFIED`.
+3. A different run independently reconstructs the acceptance criteria and collects fresh receipts with `task_proof_probe` and, after operator opt-in, `task_proof_run_checks`.
+4. Only `task_proof_review` may compute `PASS`, `PASS_WITH_LIMITS`, `FAIL`, or `INCONCLUSIVE`.
 
-Read `PROTOCOL.md` before authoring or reviewing bundles. `schema.json` is the machine-readable contract. Examples are under `examples/`.
+The six MCP tools are:
 
-## Local checks
+- `task_proof_snapshot`
+- `task_proof_probe`
+- `task_proof_run_checks`
+- `task_proof_validate_claim`
+- `task_proof_claim`
+- `task_proof_review`
+
+Read `STANDARD_V0.2.md`, `SECURITY_V0.2.md`, and `MCP_V0.2.md` before using the protocol. The machine-readable contract is `task-proof.schema.json`.
+
+## Start the dedicated MCP
+
+From a source checkout:
 
 ```bash
-npm run test:task-proof
-npm run check:task-proof
+node plugins/visual-explainer/task-proof/mcp-server.mjs
 ```
 
-The tests use Node's built-in test runner. They do not require a browser.
+From an installed package:
 
-Git snapshot evidence is structured and must match repository, branch, base/head, dirty state, digest, and binding revision; a revision string by itself is not enough.
+```bash
+visual-explainer-task-proof-mcp
+```
+
+Named repository checks are disabled by default. Review `.task-proof/checks.json` before enabling them:
+
+```bash
+TASK_PROOF_ALLOW_EXECUTION=1 visual-explainer-task-proof-mcp
+```
+
+The server and its stdio test client use the official split MCP v2 packages. Node.js 20 or newer is required.
+
+## Verification
+
+```bash
+npm run check:task-proof
+TASK_PROOF_ALLOW_EXECUTION=1 npm run test:task-proof
+npm run test:task-proof:mcp
+```
+
+The last command performs both a tool-contract check and a real stdio client/server handshake. Source-level tests do not prove release, deployment, hardware, external-system, or user acceptance.
+
+## Artifact boundary
+
+JSON is the fact source. SVG and HTML are deterministic views. Immutable bundles are stored below `.artifacts/task-proof/` and are bound to their claim/review digest and repository snapshot. A screenshot or PNG without its JSON and manifest is presentation only.

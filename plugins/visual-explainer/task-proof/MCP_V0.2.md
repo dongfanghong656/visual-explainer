@@ -1,21 +1,21 @@
 # Task Proof MCP 0.2.0
 
-The local stdio server is:
+The dedicated local stdio server is:
 
 ```text
 plugins/visual-explainer/task-proof/mcp-server.mjs
 ```
 
-Start in read-only observation mode from the repository root:
+The server uses the official split MCP v2 packages (`@modelcontextprotocol/server` and `@modelcontextprotocol/client`) and requires Node.js 20 or newer. Start in read-only observation mode from the repository root:
 
 ```bash
 node plugins/visual-explainer/task-proof/mcp-server.mjs
 ```
 
-Enable repository-owned named checks only after reviewing `.task-proof/checks.json`:
+An installed package also exposes `visual-explainer-task-proof-mcp`. Enable repository-owned named checks only after reviewing `.task-proof/checks.json`:
 
 ```bash
-TASK_PROOF_ALLOW_EXECUTION=1 node plugins/visual-explainer/task-proof/mcp-server.mjs
+TASK_PROOF_ALLOW_EXECUTION=1 visual-explainer-task-proof-mcp
 ```
 
 Example client configuration:
@@ -73,3 +73,7 @@ Every probe/check request declares the claim IDs and criterion IDs it supports. 
 Named checks run with an isolated temporary HOME and configuration. The policy owns the test/build type, the top-level executable is pinned and content-hashed, and the source repository must remain unchanged during execution. This is still code execution and should normally run in an ephemeral container or CI worker.
 
 Artifacts are stored under a digest-addressed directory containing exactly JSON, SVG, HTML, and manifest files. `LATEST` is only a convenience pointer. A PASS is valid only for the claim digest and reviewed snapshot digest recorded in the review artifact.
+
+## Compatibility and CI
+
+The stdio entry point uses `serveStdio(createServer)` and the client handshake uses `@modelcontextprotocol/client/stdio`. CI installs dependencies with lifecycle scripts disabled, runs deterministic source/JSON checks, executes every discovered `*.test.mjs`, and performs a real list-tools plus snapshot call on Node.js 20 and 22. GitHub Actions are pinned to full commit SHAs.

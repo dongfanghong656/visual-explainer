@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
+import * as z from 'zod/v4';
 import { pathToFileURL } from 'node:url';
 import {
   CLAIM_KIND,
@@ -20,112 +20,114 @@ import {
 import { runNamedChecksStrict } from './named-checks.mjs';
 import { createRepositorySnapshotStrict as createRepositorySnapshot } from './snapshot.mjs';
 
-const PROBE_SCHEMA = {
-  type: 'object',
-  required: ['id', 'type', 'supportsClaimIds', 'supportsCriterionIds'],
-  additionalProperties: false,
-  properties: {
-    id: { type: 'string' },
-    type: { enum: ['file_digest', 'commit_exists', 'changed_path'] },
-    path: { type: 'string' },
-    sha: { type: 'string' },
-    supportsClaimIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
-    supportsCriterionIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
-  },
-};
+const OPEN_OBJECT = z.record(z.string(), z.unknown());
+const UNIQUE_STRING_ARRAY = z.array(z.string()).refine(
+  (values) => new Set(values).size === values.length,
+  { message: 'array values must be unique' },
+);
+const PROBE_INPUT = z.object({
+  id: z.string(),
+  type: z.enum(['file_digest', 'commit_exists', 'changed_path']),
+  path: z.string().optional(),
+  sha: z.string().optional(),
+  supportsClaimIds: UNIQUE_STRING_ARRAY,
+  supportsCriterionIds: UNIQUE_STRING_ARRAY,
+}).strict();
+const CHECK_INPUT = z.object({
+  id: z.string(),
+  checkId: z.string(),
+  kind: z.enum(['test', 'build']).optional(),
+  supportsClaimIds: UNIQUE_STRING_ARRAY,
+  supportsCriterionIds: UNIQUE_STRING_ARRAY,
+}).strict();
+const REVIEWER_INPUT = z.object({
+  runId: z.string(),
+  role: z.literal('reviewer'),
+  agent: z.string().optional(),
+  model: z.string().optional(),
+}).strict();
+const FINDING_INPUT = z.object({
+  claimId: z.string(),
+  verdict: z.enum(['verified', 'partially_verified', 'unsupported', 'contradicted', 'stale', 'not_applicable']),
+  rationale: z.string(),
+  reviewEvidenceIds: UNIQUE_STRING_ARRAY,
+}).strict();
 
-const CHECK_REQUEST_SCHEMA = {
-  type: 'object',
-  required: ['id', 'checkId', 'supportsClaimIds', 'supportsCriterionIds'],
-  additionalProperties: false,
-  properties: {
-    id: { type: 'string' },
-    checkId: { type: 'string' },
-    kind: { enum: ['test', 'build'] },
-    supportsClaimIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
-    supportsCriterionIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
-  },
-};
-
-export const TOOL_DEFINITIONS = [
+const TOOL_SPECS = Object.freeze([
   {
     name: 'task_proof_snapshot',
+    title: 'Task Proof Snapshot',
     description: 'Create a rename-safe, dirty-content-bound deterministic Git snapshot without raw patches or arbitrary commands.',
-    inputSchema: {
-      type: 'object', additionalProperties: false,
-      properties: { repositoryPath: { type: 'string' }, baseRef: { type: 'string' } },
-    },
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      baseRef: z.string().optional(),
+    }).strict(),
   },
   {
     name: 'task_proof_probe',
+    title: 'Task Proof Probe',
     description: 'Create MCP-produced deterministic receipts for allowlisted repository observations, bound to exact claims and criteria.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['reviewerRunId', 'probes'],
-      properties: {
-        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, reviewerRunId: { type: 'string' },
-        probes: { type: 'array', minItems: 1, maxItems: 100, items: PROBE_SCHEMA },
-      },
-    },
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      baseRef: z.string().optional(),
+      reviewerRunId: z.string(),
+      probes: z.array(PROBE_INPUT).min(1).max(100),
+    }).strict(),
   },
   {
     name: 'task_proof_run_checks',
+    title: 'Task Proof Run Checks',
     description: 'Run fixed repository-defined checks from .task-proof/checks.json without a shell. Disabled unless TASK_PROOF_ALLOW_EXECUTION=1; never accepts commands or policy paths from the caller.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['reviewerRunId', 'requests'],
-      properties: {
-        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, reviewerRunId: { type: 'string' },
-        requests: { type: 'array', minItems: 1, maxItems: 20, items: CHECK_REQUEST_SCHEMA },
-      },
-    },
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      baseRef: z.string().optional(),
+      reviewerRunId: z.string(),
+      requests: z.array(CHECK_INPUT).min(1).max(20),
+    }).strict(),
   },
   {
     name: 'task_proof_validate_claim',
+    title: 'Task Proof Validate Claim',
     description: 'Validate and digest a claimant artifact without writing files or granting a completion verdict.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim'], properties: { claim: { type: 'object' } },
-    },
+    inputSchema: z.object({ claim: OPEN_OBJECT }).strict(),
   },
   {
     name: 'task_proof_claim',
+    title: 'Task Proof Claim',
     description: 'Bind a claimant model to current Git state, validate it, and render an explicitly UNVERIFIED immutable artifact set.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim'],
-      properties: {
-        repositoryPath: { type: 'string' }, baseRef: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
-      },
-    },
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      baseRef: z.string().optional(),
+      basename: z.string().optional(),
+      claim: OPEN_OBJECT,
+    }).strict(),
   },
   {
     name: 'task_proof_review',
+    title: 'Task Proof Review',
     description: 'Collect fresh MCP-produced evidence, require a complete working-tree fingerprint, enforce claimant/reviewer separation and criterion coverage, compute the only completion gate, and render an immutable review.',
-    inputSchema: {
-      type: 'object', additionalProperties: false, required: ['claim', 'reviewer', 'findings'],
-      properties: {
-        repositoryPath: { type: 'string' }, basename: { type: 'string' }, claim: { type: 'object' },
-        reviewer: {
-          type: 'object', required: ['runId', 'role'], additionalProperties: false,
-          properties: {
-            runId: { type: 'string' }, role: { const: 'reviewer' }, agent: { type: 'string' }, model: { type: 'string' },
-          },
-        },
-        findings: {
-          type: 'array',
-          items: {
-            type: 'object', required: ['claimId', 'verdict', 'rationale', 'reviewEvidenceIds'], additionalProperties: false,
-            properties: {
-              claimId: { type: 'string' },
-              verdict: { enum: ['verified', 'partially_verified', 'unsupported', 'contradicted', 'stale', 'not_applicable'] },
-              rationale: { type: 'string' },
-              reviewEvidenceIds: { type: 'array', items: { type: 'string' }, uniqueItems: true },
-            },
-          },
-        },
-        probes: { type: 'array', maxItems: 100, items: PROBE_SCHEMA },
-        checks: { type: 'array', maxItems: 20, items: CHECK_REQUEST_SCHEMA },
-      },
-    },
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      basename: z.string().optional(),
+      claim: OPEN_OBJECT,
+      reviewer: REVIEWER_INPUT,
+      findings: z.array(FINDING_INPUT),
+      probes: z.array(PROBE_INPUT).max(100).optional(),
+      checks: z.array(CHECK_INPUT).max(20).optional(),
+    }).strict(),
   },
-];
+]);
+
+export const TOOL_INPUT_SCHEMAS = Object.freeze(Object.fromEntries(
+  TOOL_SPECS.map((tool) => [tool.name, tool.inputSchema]),
+));
+
+export const TOOL_DEFINITIONS = Object.freeze(TOOL_SPECS.map((tool) => ({
+  name: tool.name,
+  title: tool.title,
+  description: tool.description,
+  inputSchema: z.toJSONSchema(tool.inputSchema),
+})));
 
 function asObject(value, name) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -280,34 +282,61 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
   }
 }
 
+function normalizeError(error) {
+  return error instanceof TaskProofError
+    ? error
+    : new TaskProofError('INTERNAL_ERROR', error instanceof Error ? error.message : String(error));
+}
+
 export function createTaskProofServer() {
-  const server = new Server(
+  const server = new McpServer(
     { name: 'visual-explainer-task-proof', version: PROTOCOL_VERSION },
-    { capabilities: { tools: {} } },
+    {
+      instructions: 'Claimant output is always UNVERIFIED. Only an independent task_proof_review may compute a completion gate. Named checks require explicit operator opt-in.',
+    },
   );
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFINITIONS }));
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-      return textResult(await handleTaskProofTool(request.params.name, request.params.arguments ?? {}));
-    } catch (error) {
-      const normalized = error instanceof TaskProofError
-        ? error
-        : new TaskProofError('INTERNAL_ERROR', error instanceof Error ? error.message : String(error));
-      return textResult({ error: { code: normalized.code, message: normalized.message, details: normalized.details } }, true);
-    }
-  });
+
+  for (const definition of TOOL_DEFINITIONS) {
+    const inputSchema = TOOL_INPUT_SCHEMAS[definition.name];
+    if (!inputSchema) throw new Error(`Missing runtime input schema for ${definition.name}.`);
+    server.registerTool(
+      definition.name,
+      {
+        title: definition.title,
+        description: definition.description,
+        inputSchema,
+      },
+      async (args) => {
+        try {
+          return textResult(await handleTaskProofTool(definition.name, args));
+        } catch (error) {
+          const normalized = normalizeError(error);
+          return textResult({
+            error: {
+              code: normalized.code,
+              message: normalized.message,
+              details: normalized.details,
+            },
+          }, true);
+        }
+      },
+    );
+  }
+
   return server;
 }
 
-export async function main() {
-  const server = createTaskProofServer();
-  await server.connect(new StdioServerTransport());
+export function main() {
+  const handle = serveStdio(createTaskProofServer);
   console.error(`visual-explainer Task Proof MCP ${PROTOCOL_VERSION} ready on stdio`);
+  return handle;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
+  try {
+    main();
+  } catch (error) {
     console.error(error);
     process.exitCode = 1;
-  });
+  }
 }

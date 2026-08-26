@@ -1,17 +1,20 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(directory, '..', '..', '..');
 const serverPath = path.join(directory, 'mcp-server.mjs');
+const inheritedEnvironment = Object.fromEntries(
+  Object.entries(process.env).filter((entry) => typeof entry[1] === 'string'),
+);
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [serverPath],
   cwd: repositoryRoot,
   env: {
-    ...process.env,
+    ...inheritedEnvironment,
     TASK_PROOF_ALLOW_EXECUTION: '0',
   },
   stderr: 'pipe',
