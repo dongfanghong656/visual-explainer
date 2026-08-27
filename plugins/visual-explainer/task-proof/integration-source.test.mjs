@@ -136,6 +136,7 @@ test('release path verifies the locked package artifact before creating a GitHub
   assert.match(releaseSmoke, /npm pack/);
   assert.match(releaseSmoke, /node_modules/);
   assert.match(releaseSmoke, /packed-artifact/);
+  assert.match(releaseSmoke, /GITHUB_REF_TYPE === ['"]tag['"]/);
   assert.match(releaseWorkflow, /tags:\s*\n\s*- ['"]v\*['"]/);
   assert.match(releaseWorkflow, /npm ci --ignore-scripts/);
   assert.match(releaseWorkflow, /npm run verify:release/);

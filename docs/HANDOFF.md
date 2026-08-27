@@ -12,7 +12,7 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 - Starting revision for TURN-0004 repair/improvement: `598006bc322cb7cb220085c63f46a71a263f4636`
 - Draft integration PR: `#2`
 - Draft stacked contract PR: `#3`
-- Draft public-enforcement PR: `#4`
+- Ready combined public/release PR targeting `main`: `#4`
 - Current turn: `TURN-0005`
 - Current checkpoint: `CHK-0005`
 - Result commit: `PENDING_SELF_REFERENCE`
@@ -31,8 +31,8 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 
 ## Verification boundary
 
-- PR #4 HEAD `2a6dab2` passed exact-head Node 20 and Node 22 checks after the three migration repairs.
-- The release-hardening delta is locally verified and requires a fresh exact-head matrix after push.
+- PR #4 HEAD `93a2704` passed the release-delta exact-head Node 20 and Node 22 checks.
+- The first distinct R2 job ran its Linux tests and MCP handshake, then found that PR ref `4/merge` was misclassified as a release tag; the repair is locally verified and requires an exact-head rerun.
 - Current development and review are from the same long-running implementation context.
 - Local npm-linked and clean temporary package deployments exist; no merge, tag, public release, downloaded-asset deployment, hardware validation, scientific validation, or user-outcome observation exists yet.
 
@@ -44,4 +44,4 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 
 ## Exact next action
 
-Push the reviewed TURN-0005 release-hardening commit, require Node 20/22 success for its exact PR #4 HEAD, retarget the combined PR to `main`, and obtain a distinct review before merge/tag/publication.
+Push the PR-ref/release-tag repair, require Node 20/22 plus the distinct R2 job to pass for its exact PR #4 HEAD, then merge, tag, publish, download, install, and read back the public artifact.

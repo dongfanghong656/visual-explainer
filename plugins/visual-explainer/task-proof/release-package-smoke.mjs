@@ -15,7 +15,7 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(directory, '..', '..', '..');
 const packageJson = JSON.parse(readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'));
 const expectedTag = `v${packageJson.version}`;
-if (process.env.GITHUB_REF_NAME && process.env.GITHUB_REF_NAME !== expectedTag) {
+if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== expectedTag) {
   throw new Error(`Release tag ${process.env.GITHUB_REF_NAME} does not match package version ${expectedTag}.`);
 }
 

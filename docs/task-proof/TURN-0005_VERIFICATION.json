@@ -23,8 +23,9 @@
     }
   },
   "remote": {
-    "releaseDeltaCi": "PENDING_PUSH",
-    "independentReview": "EXACT_HEAD_R2_JOB_IMPLEMENTED_PENDING_REMOTE_RUN",
+    "releaseDeltaCi": "NODE_20_22_PASS_AT_93a2704",
+    "independentReview": "FAILED_AT_93a2704_PR_REF_MISCLASSIFIED_AS_TAG_REPAIR_PASS_LOCAL_PENDING_RERUN",
+    "githubActionsRun": 33075935293,
     "merge": "PENDING",
     "githubPrerelease": "PENDING",
     "downloadedArtifactReadback": "PENDING"

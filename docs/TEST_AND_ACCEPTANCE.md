@@ -18,6 +18,7 @@
 | EVD-0012 | PR #4 exact-head Linux matrix at `2a6dab262f49c7d4c0abf6d5f78a38825761022f` | PASS | GitHub Actions Node 20 and Node 22 | Both jobs ran strict source/tests and real stdio handshake; release-hardening delta needs a new run |
 | EVD-0013 | Locked clean package installation and packed MCP handshake | PASS_LOCAL | `npm run test:release-package`; Windows Node 22 | 97 package files; all 8 tools; temporary clean install; not public-download evidence |
 | EVD-0014 | Default production dependency advisory gate | PASS_LOCAL | `npm audit --omit=dev --omit=peer --audit-level=high` | 0 vulnerabilities; optional Pi/PPTX peers excluded from default deployment |
+| EVD-0015 | PR #4 release-delta CI and R2 failure at `93a2704` | PARTIAL | GitHub Actions run `33075935293` | Node 20/22 passed; R2 ran 106 Linux tests and MCP handshake, then rejected PR ref `4/merge` as a tag; repair is local pending exact-head rerun |
 
 ## Contract-authority acceptance matrix
 
@@ -37,4 +38,4 @@
 
 ## Current conclusion
 
-Task Contract Protocol 2.4 and Public Enforcement 1.0 are an exact-head CI-verified release candidate. The default locked package installs in a clean temporary prefix, exposes the eight-tool MCP contract, and passes the production dependency advisory gate with optional host peers omitted. A distinct R2/R3 review, `main` integration, tag workflow, public GitHub prerelease, and downloaded-artifact readback remain pending.
+Task Contract Protocol 2.4 and Public Enforcement 1.0 passed the release-delta exact-head Node 20/22 matrix. The default locked package installs in a clean temporary prefix, exposes the eight-tool MCP contract, and passes the production dependency advisory gate with optional host peers omitted. The first distinct R2 run found a PR-ref/release-tag bug after its test and MCP checks; the local repair requires a remote rerun. `main` integration, tag workflow, public GitHub prerelease, and downloaded-artifact readback remain pending.
