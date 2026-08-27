@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "2.3.0",
+  "kind": "task-contract",
+  "contractId": "TPC-0001",
+  "taskId": "TASK-0007",
+  "repository": "dongfanghong656/visual-explainer",
+  "authority": {
+    "level": "project_approved",
+    "issuerRole": "project-owner",
+    "issuerRunId": "owner-run-001",
+    "method": "repository_source",
+    "issuedAt": "2026-08-26T12:00:00.000Z",
+    "signature": null,
+    "keyId": null,
+    "limitations": [
+      "Repository history proves source stability, not cryptographic human identity."
+    ]
+  },
+  "sources": [
+    {
+      "sourceId": "SRC-REQ-0007",
+      "type": "repository_file",
+      "locator": "docs/requirements/REQ-0007.md",
+      "revision": "0000000000000000000000000000000000000000",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "precedence": 1,
+      "description": "Approved frozen-contract requirement.",
+      "assurance": "repository-history"
+    }
+  ],
+  "scope": {
+    "baseRevision": "1111111111111111111111111111111111111111",
+    "includedOutcomes": [
+      "Enforce contract-bound final acceptance"
+    ],
+    "excludedOutcomes": [
+      "Cryptographic reviewer identity"
+    ],
+    "includedPaths": [
+      "plugins/visual-explainer/task-proof"
+    ],
+    "excludedPaths": []
+  },
+  "requirements": [
+    {
+      "requirementId": "REQ-0007-A",
+      "sourceId": "SRC-REQ-0007",
+      "statement": "Every final acceptance result must bind a frozen contract and its authority receipt.",
+      "disposition": "covered",
+      "criterionIds": [
+        "AC-CONTRACT-001"
+      ],
+      "authorityReason": null
+    }
+  ],
+  "criteria": [
+    {
+      "id": "AC-CONTRACT-001",
+      "statement": "A final PASS is impossible without an exact contract digest, authority verification receipt, complete review artifact, and frozen named-check policy.",
+      "criticality": "blocking",
+      "requiredEvidenceKinds": [
+        "test"
+      ],
+      "requiredEvidenceLocators": [
+        "named-check:task-proof-tests"
+      ],
+      "sourceRequirementRefs": [
+        "REQ-0007-A"
+      ],
+      "environment": "Node 20 and Node 22",
+      "limitations": []
+    }
+  ],
+  "evidencePolicies": {
+    "namedChecks": [
+      {
+        "id": "task-proof-tests",
+        "policyDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evidenceKind": "test",
+        "executableDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "argsDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "workingDirectory": "plugins/visual-explainer/task-proof"
+      }
+    ]
+  },
+  "reviewPolicy": {
+    "minimumIndependence": "R2",
+    "allBlockingCriteriaRequired": true,
+    "allowClaimantProvisionalContract": false
+  },
+  "lifecycle": {
+    "status": "active",
+    "supersededByContractId": null,
+    "supersededByContractDigest": null,
+    "revokedReason": null
+  },
+  "amendment": null
+}
