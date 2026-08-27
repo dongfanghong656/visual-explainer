@@ -84,7 +84,7 @@ test('CI records a distinct exact-head R2 release review after the matrix passes
   assert.match(reviewer, /git[\s\S]*rev-parse[\s\S]*HEAD/);
 });
 
-test('R2 report accepts the authorized post-review release decision', () => {
+test('R2 report accepts the authorized release lifecycle decision', () => {
   const headSha = execFileSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
     windowsHide: true,

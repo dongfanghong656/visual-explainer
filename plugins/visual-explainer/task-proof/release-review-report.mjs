@@ -31,6 +31,7 @@ const releaseDecision = /^- Release decision: `([^`]+)`$/m.exec(releaseStatus)?.
 const authorizedReleaseDecisions = new Set([
   'USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG',
   'USER_AUTHORIZED_R2_PASS_WITH_LIMITS_PENDING_MERGE_TAG',
+  'PUBLISHED_AND_DEPLOYED_WITH_R2_LIMITS',
 ]);
 if (!authorizedReleaseDecisions.has(releaseDecision)) {
   throw new Error('The release decision is not explicitly authorized for review.');
