@@ -13,29 +13,27 @@
   "evidenceAssessmentCandidate": "1.0.0",
   "namedCheckReceiptCandidate": "1.0.0",
   "lifecycleAssessmentCandidate": "1.0.0",
-  "tasks": [
-    "harden frozen contract authority",
-    "freeze named-check semantics and receipts",
-    "bind final reviewer and exact repository scope",
-    "make derived gates verifier-bound",
-    "add source-requirement coverage"
-  ],
   "artifacts": [
     "plugins/visual-explainer/task-proof/contract-authority.mjs",
+    "plugins/visual-explainer/task-proof/contract-final-gate.mjs",
     "plugins/visual-explainer/task-proof/contract-authority.test.mjs",
     "plugins/visual-explainer/task-proof/contract-authority-static.test.mjs",
+    "plugins/visual-explainer/task-proof/contract-final-gate.test.mjs",
     "plugins/visual-explainer/task-proof/task-contract.schema.json",
     "plugins/visual-explainer/task-proof/examples/task-contract.example.json",
     "plugins/visual-explainer/task-proof/CONTRACT_AUTHORITY_V2.4.md"
   ],
   "verification": {
-    "remoteNode20": "PENDING",
-    "remoteNode22": "PENDING",
+    "freshArchiveInstall": "PASS",
+    "strictTests": { "tests": 83, "passed": 83, "failed": 0, "skipped": 0 },
+    "remoteNode20": "POST_COMMIT_READBACK_REQUIRED",
+    "remoteNode22": "POST_COMMIT_READBACK_REQUIRED",
     "independentReview": "NOT_ASSESSED"
   },
   "publicEntrypointEnforcement": "NOT_IMPLEMENTED",
+  "merge": "NOT_MERGED",
   "release": "NOT_RELEASED",
-  "sync": "PENDING_REMOTE_CI_AND_READBACK",
+  "sync": "SYNCED_AFTER_POST_COMMIT_READBACK",
   "notes": [
     "PENDING_SELF_REFERENCE avoids a recursive same-commit SHA update.",
     "Public MCP and Skill paths do not yet enforce the contract core."

@@ -24,10 +24,10 @@
     "handoff": "docs/HANDOFF.md",
     "contractAuthority": "docs/task-proof/TURN-0003_CONTRACT_AUTHORITY_STATUS.md"
   },
-  "phase": "ALPHA_CONTRACT_AUTHORITY_IN_REVIEW",
-  "milestone": "Task Contract Protocol 2.4 staging candidate",
+  "phase": "ALPHA_CONTRACT_AUTHORITY_VERIFIED_STAGING",
+  "milestone": "Task Contract Protocol 2.4 verified staging candidate",
   "sync": {
-    "status": "SYNC_PARTIAL",
+    "status": "SYNCED",
     "baseRevision": "f2c0ced20615ffea3c92ddda7bd329dfc056832f",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
     "latestTurn": "TURN-0003",
@@ -39,7 +39,7 @@
     "spec": 4,
     "task": 8,
     "artifact": 7,
-    "evidence": 8,
+    "evidence": 9,
     "decision": 8,
     "risk": 11,
     "checkpoint": 4,
@@ -49,16 +49,16 @@
   "active": {
     "requirements": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0007"],
     "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003"],
-    "tasks": ["TASK-0005", "TASK-0006", "TASK-0007"],
+    "tasks": ["TASK-0005", "TASK-0007"],
     "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006"],
-    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0006", "RSK-0007", "RSK-0010"],
+    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0006", "RSK-0007"],
     "releases": ["REL-0001"]
   },
   "gates": {
     "developmentAcceptance": "BLOCKED",
     "release": "BLOCKED",
-    "reason": "Task Contract 2.4 is an isolated staging candidate. Exact final-head CI/readback, mandatory public-entrypoint enforcement, trusted adapters, and independent R2/R3 review remain incomplete."
+    "reason": "The isolated Task Contract 2.4 core is tested, but public-entrypoint enforcement, trusted external adapters, and independent R2/R3 review remain incomplete."
   },
-  "blockers": ["RSK-0005", "RSK-0006", "RSK-0007", "RSK-0010"],
-  "nextAction": "Read back draft PR #3 final HEAD and Node 20/22 checks; fix any failure before starting TASK-0007 public-entrypoint integration."
+  "blockers": ["RSK-0005", "RSK-0006", "RSK-0007"],
+  "nextAction": "After exact final-head Node 20/22 readback, create a new staging branch for TASK-0007 public-entrypoint enforcement."
 }
