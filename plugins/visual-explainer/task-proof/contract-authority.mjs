@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 
-export const TASK_CONTRACT_VERSION = '2.3.0';
-export const AUTHORITY_RECEIPT_VERSION = '1.2.0';
+export const TASK_CONTRACT_VERSION = '2.4.0';
+export const AUTHORITY_RECEIPT_VERSION = '1.4.0';
+export const EVIDENCE_ASSESSMENT_VERSION = '1.0.0';
+export const NAMED_CHECK_RECEIPT_VERSION = '1.0.0';
+export const LIFECYCLE_ASSESSMENT_VERSION = '1.0.0';
 export const MAX_CONTRACT_SOURCE_BYTES = 4 * 1024 * 1024;
 
 const CONTRACT_KIND = 'task-contract';
-const RECEIPT_KIND = 'task-contract-authority-receipt';
+const AUTHORITY_RECEIPT_KIND = 'task-contract-authority-receipt';
 const GATES = ['FAIL', 'STALE', 'INCONCLUSIVE', 'PASS_WITH_LIMITS', 'PASS'];
 const REVIEW_LEVELS = ['R0', 'R1', 'R2', 'R3'];
 const AUTHORITY_LEVELS = new Set([
@@ -23,12 +26,20 @@ const AUTHORITY_METHODS = new Set([
   'release_registry_live',
   'cryptographic_signature',
 ]);
-const SOURCE_TYPES = new Set([
-  'repository_file',
-  'user_message',
-  'github_issue',
-  'release_policy',
-]);
+const LEVEL_METHODS = {
+  claimant_provisional: new Set(['procedural_attestation']),
+  user_attested: new Set(['host_message_attestation', 'cryptographic_signature']),
+  project_approved: new Set(['repository_source', 'cryptographic_signature']),
+  issue_locked: new Set(['github_issue_live', 'cryptographic_signature']),
+  release_policy: new Set(['release_registry_live', 'repository_source', 'cryptographic_signature']),
+};
+const SOURCE_METHODS = {
+  repository_file: new Set(['repository_source', 'cryptographic_signature']),
+  user_message: new Set(['host_message_attestation', 'cryptographic_signature']),
+  github_issue: new Set(['github_issue_live', 'cryptographic_signature']),
+  release_policy: new Set(['release_registry_live', 'repository_source', 'cryptographic_signature']),
+};
+const SOURCE_TYPES = new Set(Object.keys(SOURCE_METHODS));
 const CRITICALITIES = new Set(['blocking', 'non_blocking', 'advisory']);
 const REQUIREMENT_DISPOSITIONS = new Set([
   'covered',
@@ -38,27 +49,19 @@ const REQUIREMENT_DISPOSITIONS = new Set([
 ]);
 const LIFECYCLE_STATUSES = new Set(['active', 'superseded', 'revoked']);
 const ID_PATTERN = /^[A-Z][A-Z0-9._:-]{1,127}$/;
+const CHECK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const SHA256_PATTERN = /^(?:sha256:)?[0-9a-f]{64}$/;
 const GIT_OID_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const NAMED_CHECK_PATTERN = /^named-check:([A-Za-z0-9._-]{1,128})$/;
+const NAMED_CHECK_PATTERN = /^named-check:([A-Za-z0-9][A-Za-z0-9._-]{0,127})$/;
 const ALLOWED_CONTRACT_KEYS = new Set([
-  'schemaVersion',
-  'kind',
-  'contractId',
-  'taskId',
-  'repository',
-  'authority',
-  'sources',
-  'scope',
-  'requirements',
-  'criteria',
-  'evidencePolicies',
-  'reviewPolicy',
-  'lifecycle',
-  'amendment',
+  'schemaVersion', 'kind', 'contractId', 'taskId', 'repository', 'authority', 'sources',
+  'scope', 'requirements', 'criteria', 'evidencePolicies', 'reviewPolicy', 'lifecycle', 'amendment',
 ]);
 
-const VERIFIED_AUTHORITY = Symbol('verified-task-contract-authority');
+const VERIFIED_AUTHORITY_SET = Symbol('verified-task-contract-authority-set');
+const VERIFIED_EVIDENCE = Symbol('verified-task-proof-evidence-assessment');
+const VERIFIED_NAMED_CHECKS = Symbol('verified-task-proof-named-checks');
+const VERIFIED_LIFECYCLE = Symbol('verified-task-proof-lifecycle');
 
 export class ContractAuthorityError extends Error {
   constructor(code, message, details = undefined) {
@@ -69,8 +72,10 @@ export class ContractAuthorityError extends Error {
   }
 }
 
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+function isPlainRecord(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function compareCodeUnits(a, b) {
@@ -96,6 +101,14 @@ function asId(value, path) {
   const result = asNonEmptyString(value, path, 128);
   if (!ID_PATTERN.test(result)) {
     throw new ContractAuthorityError('CONTRACT_ID', `${path} is not a stable ASCII identifier.`);
+  }
+  return result;
+}
+
+function asCheckId(value, path) {
+  const result = asNonEmptyString(value, path, 128);
+  if (!CHECK_ID_PATTERN.test(result)) {
+    throw new ContractAuthorityError('CONTRACT_CHECK_ID', `${path} is not a valid named-check identifier.`);
   }
   return result;
 }
@@ -138,8 +151,8 @@ function asInteger(value, path, { min = 0, max = Number.MAX_SAFE_INTEGER } = {})
 }
 
 function assertAllowedKeys(value, allowed, path) {
-  if (!isRecord(value)) {
-    throw new ContractAuthorityError('CONTRACT_OBJECT', `${path} must be an object.`);
+  if (!isPlainRecord(value)) {
+    throw new ContractAuthorityError('CONTRACT_OBJECT', `${path} must be a plain JSON object.`);
   }
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length) {
@@ -148,9 +161,7 @@ function assertAllowedKeys(value, allowed, path) {
 }
 
 function uniqueStrings(value, path, { minItems = 0, maxItems = 256, sort = true } = {}) {
-  if (!Array.isArray(value)) {
-    throw new ContractAuthorityError('CONTRACT_ARRAY', `${path} must be an array.`);
-  }
+  if (!Array.isArray(value)) throw new ContractAuthorityError('CONTRACT_ARRAY', `${path} must be an array.`);
   if (value.length < minItems || value.length > maxItems) {
     throw new ContractAuthorityError('CONTRACT_ARRAY_SIZE', `${path} must contain ${minItems}-${maxItems} items.`);
   }
@@ -161,20 +172,18 @@ function uniqueStrings(value, path, { minItems = 0, maxItems = 256, sort = true 
   return sort ? result.sort(compareCodeUnits) : result;
 }
 
-function uniqueIds(items, path, key = 'id') {
+function uniqueBy(items, path, key, normalizer = asId) {
   const seen = new Set();
   for (const [index, item] of items.entries()) {
-    const id = asId(item?.[key], `${path}[${index}].${key}`);
-    if (seen.has(id)) {
-      throw new ContractAuthorityError('CONTRACT_DUPLICATE_ID', `${path} contains duplicate ${key}: ${id}`);
-    }
+    const id = normalizer(item?.[key], `${path}[${index}].${key}`);
+    if (seen.has(id)) throw new ContractAuthorityError('CONTRACT_DUPLICATE_ID', `${path} contains duplicate ${key}: ${id}`);
     seen.add(id);
   }
   return seen;
 }
 
 function normalizeRepositoryPath(value, path) {
-  let result = asNonEmptyString(value, path, 2048).replaceAll('\\', '/');
+  const result = asNonEmptyString(value, path, 2048).replaceAll('\\', '/');
   if (/^[A-Za-z]:\//.test(result) || result.startsWith('/') || result.startsWith('//')) {
     throw new ContractAuthorityError('CONTRACT_SOURCE_PATH', `${path} must be repository-relative.`);
   }
@@ -185,8 +194,16 @@ function normalizeRepositoryPath(value, path) {
   if (segments[0].toLowerCase() === '.git') {
     throw new ContractAuthorityError('CONTRACT_SOURCE_PATH', `${path} must not target .git metadata.`);
   }
-  result = segments.join('/');
-  return result;
+  return segments.join('/');
+}
+
+function normalizePathSet(value, path) {
+  if (!Array.isArray(value ?? [])) throw new ContractAuthorityError('CONTRACT_ARRAY', `${path} must be an array.`);
+  const result = (value ?? []).map((item, index) => normalizeRepositoryPath(item, `${path}[${index}]`));
+  if (new Set(result).size !== result.length) {
+    throw new ContractAuthorityError('CONTRACT_DUPLICATE_VALUE', `${path} contains duplicate normalized paths.`);
+  }
+  return result.sort(compareCodeUnits);
 }
 
 function normalizeStringArray(value, path, options = {}) {
@@ -194,17 +211,14 @@ function normalizeStringArray(value, path, options = {}) {
 }
 
 function normalizeAuthority(value) {
-  const allowed = new Set([
-    'level', 'issuerRole', 'issuerRunId', 'method', 'issuedAt', 'signature', 'keyId', 'limitations',
-  ]);
+  const allowed = new Set(['level', 'issuerRole', 'issuerRunId', 'method', 'issuedAt', 'signature', 'keyId', 'limitations']);
   assertAllowedKeys(value, allowed, 'authority');
   const level = asNonEmptyString(value.level, 'authority.level', 64);
-  if (!AUTHORITY_LEVELS.has(level)) {
-    throw new ContractAuthorityError('CONTRACT_AUTHORITY_LEVEL', `Unsupported authority level: ${level}`);
-  }
   const method = asNonEmptyString(value.method, 'authority.method', 64);
-  if (!AUTHORITY_METHODS.has(method)) {
-    throw new ContractAuthorityError('CONTRACT_AUTHORITY_METHOD', `Unsupported authority method: ${method}`);
+  if (!AUTHORITY_LEVELS.has(level)) throw new ContractAuthorityError('CONTRACT_AUTHORITY_LEVEL', `Unsupported authority level: ${level}`);
+  if (!AUTHORITY_METHODS.has(method)) throw new ContractAuthorityError('CONTRACT_AUTHORITY_METHOD', `Unsupported authority method: ${method}`);
+  if (!LEVEL_METHODS[level].has(method)) {
+    throw new ContractAuthorityError('CONTRACT_AUTHORITY_METHOD_MISMATCH', `${method} is not valid for authority level ${level}.`);
   }
   const signature = asOptionalString(value.signature, 'authority.signature', 16384);
   const keyId = asOptionalString(value.keyId, 'authority.keyId', 512);
@@ -225,28 +239,22 @@ function normalizeAuthority(value) {
 
 function normalizeSource(value, index) {
   const path = `sources[${index}]`;
-  const allowed = new Set([
-    'sourceId', 'type', 'locator', 'revision', 'sha256', 'precedence', 'description', 'assurance',
-  ]);
+  const allowed = new Set(['sourceId', 'type', 'locator', 'revision', 'sha256', 'precedence', 'description', 'assurance']);
   assertAllowedKeys(value, allowed, path);
   const type = asNonEmptyString(value.type, `${path}.type`, 64);
-  if (!SOURCE_TYPES.has(type)) {
-    throw new ContractAuthorityError('CONTRACT_SOURCE_TYPE', `${path}.type is unsupported: ${type}`);
-  }
+  if (!SOURCE_TYPES.has(type)) throw new ContractAuthorityError('CONTRACT_SOURCE_TYPE', `${path}.type is unsupported: ${type}`);
   let locator = asNonEmptyString(value.locator, `${path}.locator`, 2048);
-  let revision = asOptionalString(value.revision, `${path}.revision`, 128);
-  let digest = value.sha256 === undefined ? null : asSha256(value.sha256, `${path}.sha256`);
+  let revision = asOptionalString(value.revision, `${path}.revision`, 256);
   if (type === 'repository_file') {
     locator = normalizeRepositoryPath(locator, `${path}.locator`);
     revision = asGitOid(revision, `${path}.revision`);
-    digest = asSha256(digest, `${path}.sha256`);
   }
   return {
     sourceId: asId(value.sourceId, `${path}.sourceId`),
     type,
     locator,
     revision,
-    sha256: digest,
+    sha256: asSha256(value.sha256, `${path}.sha256`),
     precedence: asInteger(value.precedence, `${path}.precedence`, { min: 0, max: 10_000 }),
     description: asOptionalString(value.description, `${path}.description`, 4096),
     assurance: asOptionalString(value.assurance, `${path}.assurance`, 128),
@@ -254,49 +262,34 @@ function normalizeSource(value, index) {
 }
 
 function normalizeScope(value) {
-  const allowed = new Set([
-    'baseRevision', 'includedOutcomes', 'excludedOutcomes', 'includedPaths', 'excludedPaths',
-  ]);
+  const allowed = new Set(['baseRevision', 'includedOutcomes', 'excludedOutcomes', 'includedPaths', 'excludedPaths']);
   assertAllowedKeys(value, allowed, 'scope');
+  const includedPaths = normalizePathSet(value.includedPaths, 'scope.includedPaths');
+  const excludedPaths = normalizePathSet(value.excludedPaths, 'scope.excludedPaths');
+  const overlap = includedPaths.filter((item) => excludedPaths.includes(item));
+  if (overlap.length) throw new ContractAuthorityError('CONTRACT_SCOPE_OVERLAP', `Paths are both included and excluded: ${overlap.join(', ')}`);
   return {
     baseRevision: asGitOid(value.baseRevision, 'scope.baseRevision'),
     includedOutcomes: normalizeStringArray(value.includedOutcomes, 'scope.includedOutcomes', { minItems: 1 }),
     excludedOutcomes: normalizeStringArray(value.excludedOutcomes, 'scope.excludedOutcomes'),
-    includedPaths: normalizeStringArray(value.includedPaths, 'scope.includedPaths').map((item, index) =>
-      normalizeRepositoryPath(item, `scope.includedPaths[${index}]`)),
-    excludedPaths: normalizeStringArray(value.excludedPaths, 'scope.excludedPaths').map((item, index) =>
-      normalizeRepositoryPath(item, `scope.excludedPaths[${index}]`)),
+    includedPaths,
+    excludedPaths,
   };
 }
 
 function normalizeCriterion(value, index) {
   const path = `criteria[${index}]`;
-  const allowed = new Set([
-    'id', 'statement', 'criticality', 'requiredEvidenceKinds', 'requiredEvidenceLocators',
-    'sourceRequirementRefs', 'environment', 'limitations',
-  ]);
+  const allowed = new Set(['id', 'statement', 'criticality', 'requiredEvidenceKinds', 'requiredEvidenceLocators', 'sourceRequirementRefs', 'environment', 'limitations']);
   assertAllowedKeys(value, allowed, path);
   const criticality = asNonEmptyString(value.criticality, `${path}.criticality`, 64);
-  if (!CRITICALITIES.has(criticality)) {
-    throw new ContractAuthorityError('CONTRACT_CRITICALITY', `${path}.criticality is unsupported.`);
-  }
-  const requiredEvidenceKinds = normalizeStringArray(
-    value.requiredEvidenceKinds,
-    `${path}.requiredEvidenceKinds`,
-    { minItems: criticality === 'blocking' ? 1 : 0 },
-  );
-  const requiredEvidenceLocators = normalizeStringArray(
-    value.requiredEvidenceLocators,
-    `${path}.requiredEvidenceLocators`,
-    { minItems: criticality === 'blocking' ? 1 : 0 },
-  );
+  if (!CRITICALITIES.has(criticality)) throw new ContractAuthorityError('CONTRACT_CRITICALITY', `${path}.criticality is unsupported.`);
   return {
     id: asId(value.id, `${path}.id`),
     statement: asNonEmptyString(value.statement, `${path}.statement`, 8192),
     criticality,
-    requiredEvidenceKinds,
-    requiredEvidenceLocators,
-    sourceRequirementRefs: normalizeStringArray(value.sourceRequirementRefs, `${path}.sourceRequirementRefs`, { minItems: 1 }),
+    requiredEvidenceKinds: normalizeStringArray(value.requiredEvidenceKinds, `${path}.requiredEvidenceKinds`, { minItems: criticality === 'blocking' ? 1 : 0 }),
+    requiredEvidenceLocators: normalizeStringArray(value.requiredEvidenceLocators, `${path}.requiredEvidenceLocators`, { minItems: criticality === 'blocking' ? 1 : 0 }),
+    sourceRequirementRefs: normalizeStringArray(value.sourceRequirementRefs, `${path}.sourceRequirementRefs`, { minItems: 1 }).map((item, itemIndex) => asId(item, `${path}.sourceRequirementRefs[${itemIndex}]`)),
     environment: asOptionalString(value.environment, `${path}.environment`, 2048),
     limitations: normalizeStringArray(value.limitations, `${path}.limitations`),
   };
@@ -304,21 +297,16 @@ function normalizeCriterion(value, index) {
 
 function normalizeRequirement(value, index) {
   const path = `requirements[${index}]`;
-  const allowed = new Set([
-    'requirementId', 'sourceId', 'statement', 'disposition', 'criterionIds', 'authorityReason',
-  ]);
+  const allowed = new Set(['requirementId', 'sourceId', 'statement', 'disposition', 'criterionIds', 'authorityReason']);
   assertAllowedKeys(value, allowed, path);
   const disposition = asNonEmptyString(value.disposition, `${path}.disposition`, 64);
-  if (!REQUIREMENT_DISPOSITIONS.has(disposition)) {
-    throw new ContractAuthorityError('CONTRACT_REQUIREMENT_DISPOSITION', `${path}.disposition is unsupported.`);
+  if (!REQUIREMENT_DISPOSITIONS.has(disposition)) throw new ContractAuthorityError('CONTRACT_REQUIREMENT_DISPOSITION', `${path}.disposition is unsupported.`);
+  const criterionIds = normalizeStringArray(value.criterionIds, `${path}.criterionIds`, { minItems: disposition === 'covered' ? 1 : 0 }).map((item, itemIndex) => asId(item, `${path}.criterionIds[${itemIndex}]`));
+  if (disposition !== 'covered' && criterionIds.length) {
+    throw new ContractAuthorityError('CONTRACT_REQUIREMENT_MAPPING', `${path}.criterionIds must be empty for ${disposition}.`);
   }
-  const criterionIds = normalizeStringArray(value.criterionIds, `${path}.criterionIds`, {
-    minItems: disposition === 'covered' ? 1 : 0,
-  }).map((item, itemIndex) => asId(item, `${path}.criterionIds[${itemIndex}]`));
   const authorityReason = asOptionalString(value.authorityReason, `${path}.authorityReason`, 8192);
-  if (disposition !== 'covered' && !authorityReason) {
-    throw new ContractAuthorityError('CONTRACT_REQUIREMENT_REASON', `${path}.authorityReason is required for ${disposition}.`);
-  }
+  if (disposition !== 'covered' && !authorityReason) throw new ContractAuthorityError('CONTRACT_REQUIREMENT_REASON', `${path}.authorityReason is required for ${disposition}.`);
   return {
     requirementId: asId(value.requirementId, `${path}.requirementId`),
     sourceId: asId(value.sourceId, `${path}.sourceId`),
@@ -331,12 +319,10 @@ function normalizeRequirement(value, index) {
 
 function normalizeNamedCheckPolicy(value, index) {
   const path = `evidencePolicies.namedChecks[${index}]`;
-  const allowed = new Set([
-    'id', 'policyDigest', 'evidenceKind', 'executableDigest', 'argsDigest', 'workingDirectory',
-  ]);
+  const allowed = new Set(['id', 'policyDigest', 'evidenceKind', 'executableDigest', 'argsDigest', 'workingDirectory']);
   assertAllowedKeys(value, allowed, path);
   return {
-    id: asNonEmptyString(value.id, `${path}.id`, 128),
+    id: asCheckId(value.id, `${path}.id`),
     policyDigest: asSha256(value.policyDigest, `${path}.policyDigest`, { prefixed: true }),
     evidenceKind: asNonEmptyString(value.evidenceKind, `${path}.evidenceKind`, 128),
     executableDigest: asSha256(value.executableDigest, `${path}.executableDigest`, { prefixed: true }),
@@ -347,27 +333,19 @@ function normalizeNamedCheckPolicy(value, index) {
 
 function normalizeEvidencePolicies(value) {
   if (value === undefined || value === null) return { namedChecks: [] };
-  const allowed = new Set(['namedChecks']);
-  assertAllowedKeys(value, allowed, 'evidencePolicies');
-  if (!Array.isArray(value.namedChecks ?? [])) {
-    throw new ContractAuthorityError('CONTRACT_ARRAY', 'evidencePolicies.namedChecks must be an array.');
-  }
+  assertAllowedKeys(value, new Set(['namedChecks']), 'evidencePolicies');
+  if (!Array.isArray(value.namedChecks ?? [])) throw new ContractAuthorityError('CONTRACT_ARRAY', 'evidencePolicies.namedChecks must be an array.');
   const namedChecks = (value.namedChecks ?? []).map(normalizeNamedCheckPolicy);
-  uniqueIds(namedChecks, 'evidencePolicies.namedChecks');
+  uniqueBy(namedChecks, 'evidencePolicies.namedChecks', 'id', asCheckId);
   return { namedChecks: namedChecks.sort((a, b) => compareCodeUnits(a.id, b.id)) };
 }
 
 function normalizeReviewPolicy(value) {
-  const allowed = new Set([
-    'minimumIndependence', 'allBlockingCriteriaRequired', 'allowClaimantProvisionalContract',
-  ]);
+  const allowed = new Set(['minimumIndependence', 'allBlockingCriteriaRequired', 'allowClaimantProvisionalContract']);
   assertAllowedKeys(value, allowed, 'reviewPolicy');
   const minimumIndependence = asNonEmptyString(value.minimumIndependence, 'reviewPolicy.minimumIndependence', 8);
-  if (!REVIEW_LEVELS.includes(minimumIndependence)) {
-    throw new ContractAuthorityError('CONTRACT_REVIEW_LEVEL', 'reviewPolicy.minimumIndependence must be R0-R3.');
-  }
-  if (typeof value.allBlockingCriteriaRequired !== 'boolean'
-    || typeof value.allowClaimantProvisionalContract !== 'boolean') {
+  if (!REVIEW_LEVELS.includes(minimumIndependence)) throw new ContractAuthorityError('CONTRACT_REVIEW_LEVEL', 'reviewPolicy.minimumIndependence must be R0-R3.');
+  if (typeof value.allBlockingCriteriaRequired !== 'boolean' || typeof value.allowClaimantProvisionalContract !== 'boolean') {
     throw new ContractAuthorityError('CONTRACT_BOOLEAN', 'reviewPolicy boolean fields are required.');
   }
   return {
@@ -378,33 +356,21 @@ function normalizeReviewPolicy(value) {
 }
 
 function normalizeLifecycle(value) {
-  const allowed = new Set([
-    'status', 'supersededByContractId', 'supersededByContractDigest', 'revokedReason',
-  ]);
+  const allowed = new Set(['status', 'supersededByContractId', 'supersededByContractDigest', 'revokedReason']);
   assertAllowedKeys(value, allowed, 'lifecycle');
   const status = asNonEmptyString(value.status, 'lifecycle.status', 32);
-  if (!LIFECYCLE_STATUSES.has(status)) {
-    throw new ContractAuthorityError('CONTRACT_LIFECYCLE', `Unsupported lifecycle status: ${status}`);
-  }
-  const supersededByContractId = value.supersededByContractId === undefined
-    ? null : asId(value.supersededByContractId, 'lifecycle.supersededByContractId');
-  const supersededByContractDigest = value.supersededByContractDigest === undefined
-    ? null : asSha256(value.supersededByContractDigest, 'lifecycle.supersededByContractDigest', { prefixed: true });
+  if (!LIFECYCLE_STATUSES.has(status)) throw new ContractAuthorityError('CONTRACT_LIFECYCLE', `Unsupported lifecycle status: ${status}`);
+  const supersededByContractId = value.supersededByContractId == null ? null : asId(value.supersededByContractId, 'lifecycle.supersededByContractId');
+  const supersededByContractDigest = value.supersededByContractDigest == null ? null : asSha256(value.supersededByContractDigest, 'lifecycle.supersededByContractDigest', { prefixed: true });
   const revokedReason = asOptionalString(value.revokedReason, 'lifecycle.revokedReason', 8192);
-  if (status === 'superseded' && (!supersededByContractId || !supersededByContractDigest)) {
-    throw new ContractAuthorityError('CONTRACT_LIFECYCLE', 'Superseded contracts require replacement ID and digest.');
-  }
-  if (status === 'revoked' && !revokedReason) {
-    throw new ContractAuthorityError('CONTRACT_LIFECYCLE', 'Revoked contracts require revokedReason.');
-  }
+  if (status === 'superseded' && (!supersededByContractId || !supersededByContractDigest)) throw new ContractAuthorityError('CONTRACT_LIFECYCLE', 'Superseded contracts require replacement ID and digest.');
+  if (status === 'revoked' && !revokedReason) throw new ContractAuthorityError('CONTRACT_LIFECYCLE', 'Revoked contracts require revokedReason.');
   return { status, supersededByContractId, supersededByContractDigest, revokedReason };
 }
 
 function normalizeAmendment(value) {
-  if (value === undefined || value === null) return null;
-  const allowed = new Set([
-    'previousContractId', 'previousContractDigest', 'reason', 'authorizedByReceiptDigest', 'effectiveAtRevision',
-  ]);
+  if (value == null) return null;
+  const allowed = new Set(['previousContractId', 'previousContractDigest', 'reason', 'authorizedByReceiptDigest', 'effectiveAtRevision']);
   assertAllowedKeys(value, allowed, 'amendment');
   return {
     previousContractId: asId(value.previousContractId, 'amendment.previousContractId'),
@@ -420,46 +386,47 @@ export function normalizeTaskContract(input) {
   if (input.schemaVersion !== TASK_CONTRACT_VERSION || input.kind !== CONTRACT_KIND) {
     throw new ContractAuthorityError('CONTRACT_VERSION', `Expected ${CONTRACT_KIND} ${TASK_CONTRACT_VERSION}.`);
   }
-  if (!Array.isArray(input.sources) || input.sources.length < 1 || input.sources.length > 64) {
-    throw new ContractAuthorityError('CONTRACT_SOURCES', 'Contract requires 1-64 sources.');
-  }
-  if (!Array.isArray(input.requirements) || input.requirements.length < 1 || input.requirements.length > 256) {
-    throw new ContractAuthorityError('CONTRACT_REQUIREMENTS', 'Contract requires 1-256 source requirements.');
-  }
-  if (!Array.isArray(input.criteria) || input.criteria.length < 1 || input.criteria.length > 128) {
-    throw new ContractAuthorityError('CONTRACT_CRITERIA', 'Contract requires 1-128 criteria.');
-  }
+  if (!Array.isArray(input.sources) || input.sources.length < 1 || input.sources.length > 64) throw new ContractAuthorityError('CONTRACT_SOURCES', 'Contract requires 1-64 sources.');
+  if (!Array.isArray(input.requirements) || input.requirements.length < 1 || input.requirements.length > 256) throw new ContractAuthorityError('CONTRACT_REQUIREMENTS', 'Contract requires 1-256 source requirements.');
+  if (!Array.isArray(input.criteria) || input.criteria.length < 1 || input.criteria.length > 128) throw new ContractAuthorityError('CONTRACT_CRITERIA', 'Contract requires 1-128 criteria.');
 
+  const authority = normalizeAuthority(input.authority);
   const sources = input.sources.map(normalizeSource);
   const requirements = input.requirements.map(normalizeRequirement);
   const criteria = input.criteria.map(normalizeCriterion);
-  uniqueIds(sources, 'sources', 'sourceId');
-  uniqueIds(requirements, 'requirements', 'requirementId');
-  uniqueIds(criteria, 'criteria');
+  const reviewPolicy = normalizeReviewPolicy(input.reviewPolicy);
+  uniqueBy(sources, 'sources', 'sourceId');
+  uniqueBy(requirements, 'requirements', 'requirementId');
+  uniqueBy(criteria, 'criteria', 'id');
 
   const sourceIds = new Set(sources.map((item) => item.sourceId));
-  const requirementIds = new Set(requirements.map((item) => item.requirementId));
-  const criterionIds = new Set(criteria.map((item) => item.id));
-
+  const requirementById = new Map(requirements.map((item) => [item.requirementId, item]));
+  const criterionById = new Map(criteria.map((item) => [item.id, item]));
+  const sourceUse = new Set();
   for (const requirement of requirements) {
-    if (!sourceIds.has(requirement.sourceId)) {
-      throw new ContractAuthorityError('CONTRACT_SOURCE_REFERENCE', `Requirement ${requirement.requirementId} references unknown source ${requirement.sourceId}.`);
-    }
+    if (!sourceIds.has(requirement.sourceId)) throw new ContractAuthorityError('CONTRACT_SOURCE_REFERENCE', `Requirement ${requirement.requirementId} references unknown source ${requirement.sourceId}.`);
+    sourceUse.add(requirement.sourceId);
     for (const criterionId of requirement.criterionIds) {
-      if (!criterionIds.has(criterionId)) {
-        throw new ContractAuthorityError('CONTRACT_CRITERION_REFERENCE', `Requirement ${requirement.requirementId} references unknown criterion ${criterionId}.`);
-      }
+      const criterion = criterionById.get(criterionId);
+      if (!criterion) throw new ContractAuthorityError('CONTRACT_CRITERION_REFERENCE', `Requirement ${requirement.requirementId} references unknown criterion ${criterionId}.`);
+      if (!criterion.sourceRequirementRefs.includes(requirement.requirementId)) throw new ContractAuthorityError('CONTRACT_MAPPING_ASYMMETRY', `${requirement.requirementId} -> ${criterionId} is not reciprocated.`);
     }
   }
   for (const criterion of criteria) {
     for (const requirementId of criterion.sourceRequirementRefs) {
-      if (!requirementIds.has(requirementId)) {
-        throw new ContractAuthorityError('CONTRACT_REQUIREMENT_REFERENCE', `Criterion ${criterion.id} references unknown requirement ${requirementId}.`);
-      }
+      const requirement = requirementById.get(requirementId);
+      if (!requirement) throw new ContractAuthorityError('CONTRACT_REQUIREMENT_REFERENCE', `Criterion ${criterion.id} references unknown requirement ${requirementId}.`);
+      if (!requirement.criterionIds.includes(criterion.id)) throw new ContractAuthorityError('CONTRACT_MAPPING_ASYMMETRY', `${criterion.id} -> ${requirementId} is not reciprocated.`);
     }
   }
-  if (!criteria.some((item) => item.criticality === 'blocking')) {
-    throw new ContractAuthorityError('CONTRACT_BLOCKING_CRITERION', 'Contract requires at least one blocking criterion.');
+  const unusedSources = sources.filter((item) => !sourceUse.has(item.sourceId)).map((item) => item.sourceId);
+  if (unusedSources.length) throw new ContractAuthorityError('CONTRACT_UNUSED_SOURCE', `Sources are not represented by requirements: ${unusedSources.join(', ')}`);
+  if (!criteria.some((item) => item.criticality === 'blocking')) throw new ContractAuthorityError('CONTRACT_BLOCKING_CRITERION', 'Contract requires at least one blocking criterion.');
+  if (authority.level === 'claimant_provisional' && reviewPolicy.allowClaimantProvisionalContract !== true) {
+    throw new ContractAuthorityError('CONTRACT_PROVISIONAL_FORBIDDEN', 'Claimant-provisional contracts are forbidden by reviewPolicy.');
+  }
+  if (!sources.some((source) => SOURCE_METHODS[source.type].has(authority.method))) {
+    throw new ContractAuthorityError('CONTRACT_AUTHORITY_SOURCE_MISMATCH', 'No source is compatible with the declared authority method.');
   }
 
   const evidencePolicies = normalizeEvidencePolicies(input.evidencePolicies);
@@ -467,8 +434,11 @@ export function normalizeTaskContract(input) {
   for (const criterion of criteria) {
     for (const locator of criterion.requiredEvidenceLocators) {
       const match = NAMED_CHECK_PATTERN.exec(locator);
-      if (match && !policyById.has(match[1])) {
-        throw new ContractAuthorityError('CONTRACT_NAMED_CHECK_POLICY', `Criterion ${criterion.id} requires ${locator} without a frozen policy.`);
+      if (!match) continue;
+      const policy = policyById.get(match[1]);
+      if (!policy) throw new ContractAuthorityError('CONTRACT_NAMED_CHECK_POLICY', `Criterion ${criterion.id} requires ${locator} without a frozen policy.`);
+      if (!criterion.requiredEvidenceKinds.includes(policy.evidenceKind)) {
+        throw new ContractAuthorityError('CONTRACT_NAMED_CHECK_KIND', `Criterion ${criterion.id} does not require the frozen evidence kind ${policy.evidenceKind}.`);
       }
     }
   }
@@ -479,13 +449,13 @@ export function normalizeTaskContract(input) {
     contractId: asId(input.contractId, 'contractId'),
     taskId: asId(input.taskId, 'taskId'),
     repository: asNonEmptyString(input.repository, 'repository', 512),
-    authority: normalizeAuthority(input.authority),
+    authority,
     sources: sources.sort((a, b) => compareCodeUnits(a.sourceId, b.sourceId)),
     scope: normalizeScope(input.scope),
     requirements: requirements.sort((a, b) => compareCodeUnits(a.requirementId, b.requirementId)),
     criteria: criteria.sort((a, b) => compareCodeUnits(a.id, b.id)),
     evidencePolicies,
-    reviewPolicy: normalizeReviewPolicy(input.reviewPolicy),
+    reviewPolicy,
     lifecycle: normalizeLifecycle(input.lifecycle),
     amendment: normalizeAmendment(input.amendment),
   };
@@ -494,17 +464,20 @@ export function normalizeTaskContract(input) {
 function canonicalize(value, seen = new WeakSet()) {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
   if (typeof value === 'number') {
-    if (!Number.isSafeInteger(value)) {
-      throw new ContractAuthorityError('CONTRACT_NUMBER', 'Canonical contracts permit safe integers only.');
-    }
+    if (!Number.isSafeInteger(value)) throw new ContractAuthorityError('CONTRACT_NUMBER', 'Canonical JSON permits safe integers only.');
     return JSON.stringify(value === 0 ? 0 : value);
   }
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalize(item, seen)).join(',')}]`;
-  if (!isRecord(value)) throw new ContractAuthorityError('CONTRACT_JSON', 'Contract contains a non-JSON value.');
-  if (seen.has(value)) throw new ContractAuthorityError('CONTRACT_CYCLE', 'Contract contains a cyclic reference.');
+  if (Array.isArray(value)) {
+    if (seen.has(value)) throw new ContractAuthorityError('CONTRACT_CYCLE', 'JSON contains a cyclic array.');
+    seen.add(value);
+    const result = `[${value.map((item) => canonicalize(item, seen)).join(',')}]`;
+    seen.delete(value);
+    return result;
+  }
+  if (!isPlainRecord(value)) throw new ContractAuthorityError('CONTRACT_JSON', 'Value contains a non-JSON object.');
+  if (seen.has(value)) throw new ContractAuthorityError('CONTRACT_CYCLE', 'JSON contains a cyclic object.');
   seen.add(value);
-  const result = `{${Object.keys(value).sort(compareCodeUnits)
-    .map((key) => `${JSON.stringify(key)}:${canonicalize(value[key], seen)}`).join(',')}}`;
+  const result = `{${Object.keys(value).sort(compareCodeUnits).map((key) => `${JSON.stringify(key)}:${canonicalize(value[key], seen)}`).join(',')}}`;
   seen.delete(value);
   return result;
 }
@@ -522,82 +495,69 @@ export function digestTaskContract(contract) {
 }
 
 export function digestAuthorityDeclaration(contract) {
-  const normalized = normalizeTaskContract(contract);
-  return `sha256:${sha256(canonicalize(normalized.authority))}`;
+  return `sha256:${sha256(canonicalize(normalizeTaskContract(contract).authority))}`;
 }
 
 export function digestJson(value) {
   return `sha256:${sha256(canonicalize(value))}`;
 }
 
-function normalizeCriterionSnapshot(value, path = 'contractCriterionSnapshot') {
-  if (!Array.isArray(value)) {
-    throw new ContractAuthorityError('CONTRACT_CRITERION_SET_MISMATCH', `${path} must be an array.`);
-  }
+function normalizeCriterionSnapshot(value) {
+  if (!Array.isArray(value)) throw new ContractAuthorityError('CONTRACT_CRITERION_SET_MISMATCH', 'contractCriterionSnapshot must be an array.');
   const normalized = value.map((item, index) => normalizeCriterion(item, index));
-  uniqueIds(normalized, path);
+  uniqueBy(normalized, 'contractCriterionSnapshot', 'id');
   return normalized.sort((a, b) => compareCodeUnits(a.id, b.id));
 }
 
-function normalizeClaimRepository(claim) {
-  const repository = claim?.repository;
-  if (!isRecord(repository)) {
-    throw new ContractAuthorityError('CONTRACT_CLAIM_REPOSITORY', 'claim.repository is required.');
-  }
+function normalizeRepositoryIdentity(value, path) {
+  if (!isPlainRecord(value)) throw new ContractAuthorityError('CONTRACT_REPOSITORY', `${path} is required.`);
   return {
-    identity: asNonEmptyString(repository.identity, 'claim.repository.identity', 512),
-    baseSha: asGitOid(repository.baseSha, 'claim.repository.baseSha'),
-    headSha: asGitOid(repository.headSha, 'claim.repository.headSha'),
+    identity: asNonEmptyString(value.identity, `${path}.identity`, 512),
+    baseSha: asGitOid(value.baseSha, `${path}.baseSha`),
+    headSha: asGitOid(value.headSha, `${path}.headSha`),
   };
 }
 
 export function validateClaimContractBinding(contract, claim) {
   const normalized = normalizeTaskContract(contract);
-  if (!isRecord(claim)) throw new ContractAuthorityError('CONTRACT_CLAIM', 'Claim must be an object.');
-  const ref = claim.contractRef;
-  if (!isRecord(ref)) throw new ContractAuthorityError('CONTRACT_REF_REQUIRED', 'Claim requires contractRef.');
-  const expectedDigest = digestTaskContract(normalized);
-  const expectedAuthorityDigest = digestAuthorityDeclaration(normalized);
+  if (!isPlainRecord(claim)) throw new ContractAuthorityError('CONTRACT_CLAIM', 'Claim must be an object.');
   const errors = [];
-  if (ref.contractId !== normalized.contractId) errors.push('CONTRACT_ID_MISMATCH');
-  if (ref.contractDigest !== expectedDigest) errors.push('CONTRACT_DIGEST_MISMATCH');
-  if (ref.authorityDeclarationDigest !== expectedAuthorityDigest) errors.push('CONTRACT_AUTHORITY_DIGEST_MISMATCH');
+  if (!isPlainRecord(claim.contractRef)) errors.push('CONTRACT_REF_REQUIRED');
+  if (claim.contractRef?.contractId !== normalized.contractId) errors.push('CONTRACT_ID_MISMATCH');
+  if (claim.contractRef?.contractDigest !== digestTaskContract(normalized)) errors.push('CONTRACT_DIGEST_MISMATCH');
+  if (claim.contractRef?.authorityDeclarationDigest !== digestAuthorityDeclaration(normalized)) errors.push('CONTRACT_AUTHORITY_DIGEST_MISMATCH');
   if (claim.taskId !== normalized.taskId) errors.push('CONTRACT_TASK_MISMATCH');
-  const repository = normalizeClaimRepository(claim);
+  if (!isPlainRecord(claim.producer) || claim.producer.role !== 'claimant' || typeof claim.producer.runId !== 'string') errors.push('CLAIMANT_IDENTITY');
+  const repository = normalizeRepositoryIdentity(claim.repository, 'claim.repository');
   if (repository.identity !== normalized.repository) errors.push('CONTRACT_REPOSITORY_MISMATCH');
   if (repository.baseSha !== normalized.scope.baseRevision) errors.push('CONTRACT_BASE_MISMATCH');
-  if (timestampMs(claim.generatedAt, 'claim.generatedAt') < timestampMs(normalized.authority.issuedAt, 'authority.issuedAt')) {
-    errors.push('CLAIM_PREDATES_CONTRACT');
-  }
+  if (timestampMs(claim.generatedAt, 'claim.generatedAt') < timestampMs(normalized.authority.issuedAt, 'authority.issuedAt')) errors.push('CLAIM_PREDATES_CONTRACT');
   const snapshot = normalizeCriterionSnapshot(claim.contractCriterionSnapshot);
   if (canonicalize(snapshot) !== canonicalize(normalized.criteria)) errors.push('CONTRACT_CRITERION_CONTENT_MISMATCH');
-  return {
-    ok: errors.length === 0,
-    errors,
-    contractDigest: expectedDigest,
-    authorityDeclarationDigest: expectedAuthorityDigest,
-    repository,
-  };
+  return { ok: errors.length === 0, errors, contractDigest: digestTaskContract(normalized), authorityDeclarationDigest: digestAuthorityDeclaration(normalized), repository };
 }
 
-function receiptPayload(receipt) {
-  const copy = { ...receipt };
-  delete copy.receiptDigest;
+function withoutDigest(value, field = 'receiptDigest') {
+  const copy = { ...value };
+  delete copy[field];
   return copy;
+}
+
+function receiptMethodAllowed(contract, source, method) {
+  return LEVEL_METHODS[contract.authority.level].has(method) && SOURCE_METHODS[source.type].has(method);
 }
 
 export function createAuthorityReceipt({ contract, sourceId, claim, reviewerRunId, observedAt, method, observation }) {
   const normalized = normalizeTaskContract(contract);
   const claimBinding = validateClaimContractBinding(normalized, claim);
-  if (!claimBinding.ok) {
-    throw new ContractAuthorityError('CONTRACT_CLAIM_BINDING', 'Cannot issue authority receipt for an invalid claim binding.', claimBinding);
-  }
+  if (!claimBinding.ok) throw new ContractAuthorityError('CONTRACT_CLAIM_BINDING', 'Cannot issue authority receipt for an invalid Claim.', claimBinding);
   const source = normalized.sources.find((item) => item.sourceId === sourceId);
   if (!source) throw new ContractAuthorityError('CONTRACT_SOURCE_REFERENCE', `Unknown source: ${sourceId}`);
-  if (!isRecord(observation)) throw new ContractAuthorityError('CONTRACT_AUTHORITY_OBSERVATION', 'Authority observation is required.');
+  if (!receiptMethodAllowed(normalized, source, method)) throw new ContractAuthorityError('CONTRACT_AUTHORITY_METHOD_MISMATCH', `${method} cannot verify ${source.type}.`);
+  if (!isPlainRecord(observation)) throw new ContractAuthorityError('CONTRACT_AUTHORITY_OBSERVATION', 'Authority observation is required.');
   const receipt = {
     receiptVersion: AUTHORITY_RECEIPT_VERSION,
-    kind: RECEIPT_KIND,
+    kind: AUTHORITY_RECEIPT_KIND,
     contractId: normalized.contractId,
     contractDigest: digestTaskContract(normalized),
     sourceId: source.sourceId,
@@ -610,7 +570,7 @@ export function createAuthorityReceipt({ contract, sourceId, claim, reviewerRunI
     implementationHeadRevision: claimBinding.repository.headSha,
     producerRunId: asNonEmptyString(reviewerRunId, 'reviewerRunId', 256),
     observedAt: asIsoTimestamp(observedAt, 'observedAt'),
-    method: asNonEmptyString(method, 'method', 64),
+    method,
     observation: {
       sourceExistsAtBase: observation.sourceExistsAtBase === true,
       revisionIsAncestor: observation.revisionIsAncestor === true,
@@ -624,80 +584,87 @@ export function createAuthorityReceipt({ contract, sourceId, claim, reviewerRunI
       adapterReceiptDigest: asSha256(observation.adapterReceiptDigest, 'observation.adapterReceiptDigest', { prefixed: true }),
     },
   };
-  receipt.receiptDigest = digestJson(receiptPayload(receipt));
+  receipt.receiptDigest = digestJson(withoutDigest(receipt));
   return receipt;
 }
 
-function allowedAuthorityMethodsForLevel(level) {
-  const table = {
-    claimant_provisional: new Set(['procedural_attestation']),
-    user_attested: new Set(['host_message_attestation', 'cryptographic_signature']),
-    project_approved: new Set(['repository_source', 'cryptographic_signature']),
-    issue_locked: new Set(['github_issue_live', 'cryptographic_signature']),
-    release_policy: new Set(['release_registry_live', 'repository_source', 'cryptographic_signature']),
-  };
-  return table[level] ?? new Set();
+function reviewReceiptDigestSet(review) {
+  const values = review?.contractRef?.authorityVerificationReceiptDigests
+    ?? (review?.contractRef?.authorityVerificationReceiptDigest ? [review.contractRef.authorityVerificationReceiptDigest] : []);
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values)].sort(compareCodeUnits);
 }
 
 export function verifyAuthorityReceipt({ contract, claim, review, receipt, adapter }) {
   const normalized = normalizeTaskContract(contract);
   const claimBinding = validateClaimContractBinding(normalized, claim);
   const errors = [...claimBinding.errors];
-  if (!isRecord(review) || !isRecord(review.reviewer)) errors.push('REVIEW_ARTIFACT_REQUIRED');
-  if (!isRecord(receipt)) errors.push('CONTRACT_AUTHORITY_RECEIPT_REQUIRED');
-  if (errors.length) return { ok: false, errors, cap: 'INCONCLUSIVE' };
-
-  if (receipt.receiptVersion !== AUTHORITY_RECEIPT_VERSION || receipt.kind !== RECEIPT_KIND) errors.push('CONTRACT_AUTHORITY_RECEIPT_VERSION');
-  const expectedReceiptDigest = digestJson(receiptPayload(receipt));
-  if (receipt.receiptDigest !== expectedReceiptDigest) errors.push('CONTRACT_AUTHORITY_RECEIPT_DIGEST');
+  if (!isPlainRecord(review) || !isPlainRecord(review.reviewer)) errors.push('REVIEW_ARTIFACT_REQUIRED');
+  if (!isPlainRecord(receipt)) errors.push('CONTRACT_AUTHORITY_RECEIPT_REQUIRED');
+  if (errors.length) return { ok: false, errors, cap: claimBinding.ok ? 'INCONCLUSIVE' : 'FAIL' };
+  const source = normalized.sources.find((item) => item.sourceId === receipt.sourceId);
+  if (!source) errors.push('CONTRACT_AUTHORITY_RECEIPT_SOURCE');
+  if (receipt.receiptVersion !== AUTHORITY_RECEIPT_VERSION || receipt.kind !== AUTHORITY_RECEIPT_KIND) errors.push('CONTRACT_AUTHORITY_RECEIPT_VERSION');
+  const expectedDigest = digestJson(withoutDigest(receipt));
+  if (receipt.receiptDigest !== expectedDigest) errors.push('CONTRACT_AUTHORITY_RECEIPT_DIGEST');
   if (receipt.contractId !== normalized.contractId || receipt.contractDigest !== digestTaskContract(normalized)) errors.push('CONTRACT_AUTHORITY_RECEIPT_CONTRACT');
+  if (source && (receipt.sourceType !== source.type || receipt.sourceLocator !== source.locator || receipt.sourceRevision !== source.revision || receipt.sourceSha256 !== source.sha256)) errors.push('CONTRACT_AUTHORITY_RECEIPT_SOURCE');
   if (receipt.repository !== normalized.repository) errors.push('CONTRACT_AUTHORITY_RECEIPT_REPOSITORY');
   if (receipt.implementationBaseRevision !== normalized.scope.baseRevision) errors.push('CONTRACT_AUTHORITY_RECEIPT_BASE');
   if (receipt.implementationHeadRevision !== claimBinding.repository.headSha) errors.push('CONTRACT_AUTHORITY_RECEIPT_HEAD');
   if (receipt.producerRunId !== review.reviewer.runId) errors.push('CONTRACT_AUTHORITY_REVIEWER_BINDING');
   if (receipt.producerRunId === claim?.producer?.runId) errors.push('CONTRACT_AUTHORITY_CLAIMANT');
-  if (!allowedAuthorityMethodsForLevel(normalized.authority.level).has(receipt.method)) errors.push('CONTRACT_AUTHORITY_METHOD_MISMATCH');
+  if (source && !receiptMethodAllowed(normalized, source, receipt.method)) errors.push('CONTRACT_AUTHORITY_METHOD_MISMATCH');
   const observedAt = timestampMs(receipt.observedAt, 'receipt.observedAt');
-  const issuedAt = timestampMs(normalized.authority.issuedAt, 'authority.issuedAt');
-  const reviewAt = timestampMs(review.generatedAt, 'review.generatedAt');
-  if (observedAt < issuedAt) errors.push('AUTHORITY_RECEIPT_PREDATES_CONTRACT');
-  if (observedAt > reviewAt) errors.push('AUTHORITY_RECEIPT_POSTDATES_REVIEW');
-  if (review?.contractRef?.authorityVerificationReceiptDigest !== receipt.receiptDigest) errors.push('CONTRACT_AUTHORITY_VERIFICATION_BINDING');
-
-  if (typeof adapter !== 'function') return { ok: false, errors: [...errors, 'CONTRACT_AUTHORITY_ADAPTER_REQUIRED'], cap: 'INCONCLUSIVE' };
+  if (observedAt < timestampMs(normalized.authority.issuedAt, 'authority.issuedAt')) errors.push('AUTHORITY_RECEIPT_PREDATES_CONTRACT');
+  if (observedAt > timestampMs(review.generatedAt, 'review.generatedAt')) errors.push('AUTHORITY_RECEIPT_POSTDATES_REVIEW');
+  if (!reviewReceiptDigestSet(review).includes(receipt.receiptDigest)) errors.push('CONTRACT_AUTHORITY_VERIFICATION_BINDING');
+  if (typeof adapter !== 'function') return { ok: false, errors: [...errors, 'CONTRACT_AUTHORITY_ADAPTER_REQUIRED'], cap: errors.length ? 'FAIL' : 'INCONCLUSIVE' };
   let live;
-  try {
-    live = adapter({ contract: normalized, claim, review, receipt });
-  } catch (error) {
-    return { ok: false, errors: [...errors, 'CONTRACT_AUTHORITY_ADAPTER_FAILURE'], cap: 'INCONCLUSIVE', adapterError: String(error) };
-  }
-  if (!isRecord(live) || live.ok !== true) errors.push('CONTRACT_AUTHORITY_ADAPTER_REJECTED');
+  try { live = adapter({ contract: normalized, source, claim, review, receipt }); }
+  catch (error) { return { ok: false, errors: [...errors, 'CONTRACT_AUTHORITY_ADAPTER_FAILURE'], cap: errors.length ? 'FAIL' : 'INCONCLUSIVE', adapterError: String(error) }; }
+  if (!isPlainRecord(live) || live.ok !== true) errors.push('CONTRACT_AUTHORITY_ADAPTER_REJECTED');
   if (live?.adapterId !== receipt.observation?.adapterId) errors.push('CONTRACT_AUTHORITY_ADAPTER_ID');
   if (live?.adapterReceiptDigest !== receipt.observation?.adapterReceiptDigest) errors.push('CONTRACT_AUTHORITY_ADAPTER_DIGEST');
-  if (receipt.observation?.sourceExistsAtBase !== true) errors.push('CONTRACT_SOURCE_NOT_AT_BASE');
-  if (receipt.observation?.revisionIsAncestor !== true) errors.push('CONTRACT_REVISION_NOT_ANCESTOR');
-  if (receipt.observation?.sourceChangedInImplementationScope !== false) errors.push('CONTRACT_CHANGED_IN_IMPLEMENTATION_SCOPE');
-  if (receipt.observation?.safeGitConfiguration !== true) errors.push('CONTRACT_UNSAFE_GIT_CONFIGURATION');
-  if (receipt.observation?.sourceIsRegularFile !== true || receipt.observation?.sourceIsSymbolicLink !== false) errors.push('CONTRACT_SOURCE_FILE_TYPE');
+  if (source?.type === 'repository_file') {
+    if (receipt.observation?.sourceExistsAtBase !== true) errors.push('CONTRACT_SOURCE_NOT_AT_BASE');
+    if (receipt.observation?.revisionIsAncestor !== true) errors.push('CONTRACT_REVISION_NOT_ANCESTOR');
+    if (receipt.observation?.sourceChangedInImplementationScope !== false) errors.push('CONTRACT_CHANGED_IN_IMPLEMENTATION_SCOPE');
+    if (receipt.observation?.safeGitConfiguration !== true) errors.push('CONTRACT_UNSAFE_GIT_CONFIGURATION');
+    if (receipt.observation?.sourceIsRegularFile !== true || receipt.observation?.sourceIsSymbolicLink !== false) errors.push('CONTRACT_SOURCE_FILE_TYPE');
+  }
   if (receipt.observation?.observedSourceSha256 !== receipt.sourceSha256) errors.push('CONTRACT_SOURCE_DIGEST');
-
-  const hardErrors = new Set([
-    'CONTRACT_AUTHORITY_RECEIPT_VERSION', 'CONTRACT_AUTHORITY_RECEIPT_DIGEST',
-    'CONTRACT_AUTHORITY_RECEIPT_CONTRACT', 'CONTRACT_AUTHORITY_RECEIPT_REPOSITORY',
-    'CONTRACT_AUTHORITY_RECEIPT_BASE', 'CONTRACT_AUTHORITY_RECEIPT_HEAD',
-    'CONTRACT_AUTHORITY_REVIEWER_BINDING', 'CONTRACT_AUTHORITY_CLAIMANT',
-    'CONTRACT_AUTHORITY_METHOD_MISMATCH', 'AUTHORITY_RECEIPT_PREDATES_CONTRACT',
-    'AUTHORITY_RECEIPT_POSTDATES_REVIEW', 'CONTRACT_AUTHORITY_VERIFICATION_BINDING',
-    'CONTRACT_AUTHORITY_ADAPTER_ID', 'CONTRACT_AUTHORITY_ADAPTER_DIGEST',
-    'CONTRACT_SOURCE_NOT_AT_BASE', 'CONTRACT_REVISION_NOT_ANCESTOR',
-    'CONTRACT_CHANGED_IN_IMPLEMENTATION_SCOPE', 'CONTRACT_UNSAFE_GIT_CONFIGURATION',
-    'CONTRACT_SOURCE_FILE_TYPE', 'CONTRACT_SOURCE_DIGEST',
-  ]);
   const ok = errors.length === 0;
-  const cap = ok ? 'PASS' : errors.some((item) => hardErrors.has(item)) ? 'FAIL' : 'INCONCLUSIVE';
-  const result = { ok, errors, cap, receiptDigest: expectedReceiptDigest };
-  if (ok) Object.defineProperty(result, VERIFIED_AUTHORITY, { value: true, enumerable: false });
+  const result = { ok, errors, cap: ok ? 'PASS' : 'FAIL', receiptDigest: expectedDigest, sourceId: receipt.sourceId };
+  if (ok) Object.defineProperty(result, VERIFIED_AUTHORITY_SET, { value: true, enumerable: false });
   return result;
+}
+
+export function verifyAuthorityReceipts({ contract, claim, review, receipts = [], adapter }) {
+  const normalized = normalizeTaskContract(contract);
+  if (!Array.isArray(receipts)) return { ok: false, errors: ['CONTRACT_AUTHORITY_RECEIPT_SET'], cap: 'FAIL' };
+  const bySource = new Map();
+  const errors = [];
+  for (const receipt of receipts) {
+    if (!isPlainRecord(receipt) || typeof receipt.sourceId !== 'string') { errors.push('CONTRACT_AUTHORITY_RECEIPT_SET'); continue; }
+    if (bySource.has(receipt.sourceId)) errors.push(`CONTRACT_AUTHORITY_RECEIPT_DUPLICATE:${receipt.sourceId}`);
+    bySource.set(receipt.sourceId, receipt);
+  }
+  for (const source of normalized.sources) if (!bySource.has(source.sourceId)) errors.push(`CONTRACT_AUTHORITY_RECEIPT_MISSING:${source.sourceId}`);
+  if (errors.some((item) => item.includes('DUPLICATE'))) return { ok: false, errors, cap: 'FAIL' };
+  const results = [];
+  for (const source of normalized.sources) {
+    const receipt = bySource.get(source.sourceId);
+    if (!receipt) continue;
+    results.push(verifyAuthorityReceipt({ contract: normalized, claim, review, receipt, adapter }));
+  }
+  errors.push(...results.flatMap((item) => item.errors));
+  const cap = results.some((item) => item.cap === 'FAIL') ? 'FAIL'
+    : errors.some((item) => item.startsWith('CONTRACT_AUTHORITY_RECEIPT_MISSING')) || results.some((item) => item.cap !== 'PASS') ? 'INCONCLUSIVE'
+      : 'PASS';
+  const output = { ok: cap === 'PASS' && errors.length === 0, errors, cap, results };
+  if (output.ok) Object.defineProperty(output, VERIFIED_AUTHORITY_SET, { value: true, enumerable: false });
+  return output;
 }
 
 function reviewLevelCap(level) {
@@ -707,20 +674,23 @@ function reviewLevelCap(level) {
   return 'FAIL';
 }
 
-export function validateReviewContractBinding(contract, claim, review, receipt) {
+export function validateReviewContractBinding(contract, claim, review, receipts = []) {
   const normalized = normalizeTaskContract(contract);
   const claimBinding = validateClaimContractBinding(normalized, claim);
   const errors = [...claimBinding.errors];
-  if (!isRecord(review)) return { ok: false, errors: [...errors, 'REVIEW_ARTIFACT_REQUIRED'] };
-  if (!isRecord(review.contractRef)) errors.push('CONTRACT_REVIEW_REF_REQUIRED');
+  if (!isPlainRecord(review)) return { ok: false, errors: [...errors, 'REVIEW_ARTIFACT_REQUIRED'], cap: claimBinding.ok ? 'INCONCLUSIVE' : 'FAIL' };
+  if (!isPlainRecord(review.contractRef)) errors.push('CONTRACT_REVIEW_REF_REQUIRED');
   if (review.contractRef?.contractId !== normalized.contractId) errors.push('CONTRACT_REVIEW_ID_MISMATCH');
   if (review.contractRef?.contractDigest !== digestTaskContract(normalized)) errors.push('CONTRACT_REVIEW_DIGEST_MISMATCH');
   if (review.contractRef?.authorityDeclarationDigest !== digestAuthorityDeclaration(normalized)) errors.push('CONTRACT_REVIEW_AUTHORITY_DIGEST_MISMATCH');
-  if (receipt && review.contractRef?.authorityVerificationReceiptDigest !== receipt.receiptDigest) errors.push('CONTRACT_AUTHORITY_VERIFICATION_BINDING');
+  const expectedReceipts = (receipts ?? []).map((item) => item?.receiptDigest).filter(Boolean).sort(compareCodeUnits);
+  if (canonicalize(reviewReceiptDigestSet(review)) !== canonicalize(expectedReceipts)) errors.push('CONTRACT_AUTHORITY_VERIFICATION_BINDING');
   if (review.claimDigest !== digestJson(claim)) errors.push('CONTRACT_REVIEW_CLAIM_DIGEST');
   if (review.taskId !== normalized.taskId) errors.push('CONTRACT_REVIEW_TASK_MISMATCH');
-  if (!isRecord(review.reviewer) || review.reviewer.role !== 'reviewer') errors.push('REVIEWER_ROLE');
-  if (!isRecord(review.reviewerAttestation)) errors.push('REVIEWER_ATTESTATION_REQUIRED');
+  const reviewRepository = normalizeRepositoryIdentity(review.repository, 'review.repository');
+  if (reviewRepository.identity !== claimBinding.repository.identity || reviewRepository.baseSha !== claimBinding.repository.baseSha || reviewRepository.headSha !== claimBinding.repository.headSha) errors.push('CONTRACT_REVIEW_REPOSITORY_MISMATCH');
+  if (!isPlainRecord(review.reviewer) || review.reviewer.role !== 'reviewer') errors.push('REVIEWER_ROLE');
+  if (!isPlainRecord(review.reviewerAttestation)) errors.push('REVIEWER_ATTESTATION_REQUIRED');
   const level = review.reviewerAttestation?.level;
   if (!REVIEW_LEVELS.includes(level)) errors.push('REVIEWER_LEVEL');
   if (review.reviewerAttestation?.method !== 'procedural_attestation') errors.push('REVIEWER_ATTESTATION_METHOD');
@@ -731,24 +701,55 @@ export function validateReviewContractBinding(contract, claim, review, receipt) 
     if (review.reviewerAttestation?.independentEvidenceCollected !== true) errors.push('REVIEW_EVIDENCE_REQUIRED');
   }
   if (level === 'R3' && review.reviewerAttestation?.adversarialEvidenceCollected !== true) errors.push('REVIEW_ADVERSARIAL_EVIDENCE_REQUIRED');
-  const requiredLevel = normalized.reviewPolicy.minimumIndependence;
-  if (REVIEW_LEVELS.indexOf(level) < REVIEW_LEVELS.indexOf(requiredLevel)) errors.push('REVIEW_INDEPENDENCE_INSUFFICIENT');
-  const claimAt = timestampMs(claim.generatedAt, 'claim.generatedAt');
-  const reviewAt = timestampMs(review.generatedAt, 'review.generatedAt');
-  if (reviewAt < claimAt) errors.push('REVIEW_PREDATES_CLAIM');
-  const hardErrors = new Set([
-    'CONTRACT_REVIEW_ID_MISMATCH', 'CONTRACT_REVIEW_DIGEST_MISMATCH',
+  if (REVIEW_LEVELS.indexOf(level) < REVIEW_LEVELS.indexOf(normalized.reviewPolicy.minimumIndependence)) errors.push('REVIEW_INDEPENDENCE_INSUFFICIENT');
+  if (timestampMs(review.generatedAt, 'review.generatedAt') < timestampMs(claim.generatedAt, 'claim.generatedAt')) errors.push('REVIEW_PREDATES_CLAIM');
+  const hard = new Set([
+    ...claimBinding.errors, 'CONTRACT_REVIEW_ID_MISMATCH', 'CONTRACT_REVIEW_DIGEST_MISMATCH',
     'CONTRACT_REVIEW_AUTHORITY_DIGEST_MISMATCH', 'CONTRACT_AUTHORITY_VERIFICATION_BINDING',
-    'CONTRACT_REVIEW_CLAIM_DIGEST', 'CONTRACT_REVIEW_TASK_MISMATCH', 'REVIEWER_ROLE',
-    'REVIEWER_ATTESTATION_BINDING', 'NOT_INDEPENDENT', 'REVIEW_PREDATES_CLAIM',
+    'CONTRACT_REVIEW_CLAIM_DIGEST', 'CONTRACT_REVIEW_TASK_MISMATCH', 'CONTRACT_REVIEW_REPOSITORY_MISMATCH',
+    'REVIEWER_ROLE', 'REVIEWER_ATTESTATION_BINDING', 'NOT_INDEPENDENT', 'REVIEW_PREDATES_CLAIM',
   ]);
   let cap = reviewLevelCap(level);
-  if (errors.some((item) => hardErrors.has(item))) cap = 'FAIL';
+  if (errors.some((item) => hard.has(item))) cap = 'FAIL';
   else if (errors.length) cap = minGate(cap, 'INCONCLUSIVE');
-  return { ok: errors.length === 0, errors, reviewerLevel: level, cap };
+  return { ok: errors.length === 0, errors, reviewerLevel: level, cap, repository: reviewRepository };
 }
 
-export function validateNamedCheckReceipts(contract, evidenceReceipts = []) {
+function verifyOpaqueAssessment({ assessment, verifier, version, kind, expected, symbol, missingCode, rejectedCode }) {
+  if (!isPlainRecord(assessment)) return { ok: false, errors: [missingCode], cap: 'INCONCLUSIVE' };
+  const errors = [];
+  if (assessment.version !== version || assessment.kind !== kind) errors.push(`${rejectedCode}_VERSION`);
+  for (const [key, value] of Object.entries(expected)) if (assessment[key] !== value) errors.push(`${rejectedCode}_${key.toUpperCase()}`);
+  const payloadDigest = digestJson(withoutDigest(assessment, 'assessmentDigest'));
+  if (assessment.assessmentDigest !== payloadDigest) errors.push(`${rejectedCode}_DIGEST`);
+  if (!GATES.includes(assessment.gate)) errors.push(`${rejectedCode}_GATE`);
+  if (typeof verifier !== 'function') return { ok: false, errors: [...errors, `${rejectedCode}_VERIFIER_REQUIRED`], cap: errors.length ? 'FAIL' : 'INCONCLUSIVE' };
+  let live;
+  try { live = verifier(assessment); }
+  catch (error) { return { ok: false, errors: [...errors, `${rejectedCode}_VERIFIER_FAILURE`], cap: errors.length ? 'FAIL' : 'INCONCLUSIVE', verifierError: String(error) }; }
+  if (!isPlainRecord(live) || live.ok !== true || live.assessmentDigest !== payloadDigest || live.gate !== assessment.gate) errors.push(`${rejectedCode}_VERIFIER_REJECTED`);
+  const output = { ok: errors.length === 0, errors, cap: errors.length ? 'FAIL' : assessment.gate, gate: assessment.gate, assessmentDigest: payloadDigest };
+  if (output.ok) Object.defineProperty(output, symbol, { value: true, enumerable: false });
+  return output;
+}
+
+export function verifyEvidenceAssessment({ contract, claim, review, assessment, verifier }) {
+  return verifyOpaqueAssessment({
+    assessment, verifier, version: EVIDENCE_ASSESSMENT_VERSION, kind: 'task-proof-evidence-assessment', symbol: VERIFIED_EVIDENCE,
+    missingCode: 'EVIDENCE_ASSESSMENT_REQUIRED', rejectedCode: 'EVIDENCE_ASSESSMENT',
+    expected: { contractDigest: digestTaskContract(contract), claimDigest: digestJson(claim), reviewDigest: digestJson(review) },
+  });
+}
+
+export function verifyLifecycleAssessment({ contract, claim, review, assessment, verifier }) {
+  return verifyOpaqueAssessment({
+    assessment, verifier, version: LIFECYCLE_ASSESSMENT_VERSION, kind: 'task-proof-lifecycle-assessment', symbol: VERIFIED_LIFECYCLE,
+    missingCode: 'LIFECYCLE_ASSESSMENT_REQUIRED', rejectedCode: 'LIFECYCLE_ASSESSMENT',
+    expected: { contractDigest: digestTaskContract(contract), claimDigest: digestJson(claim), reviewDigest: digestJson(review) },
+  });
+}
+
+export function validateNamedCheckReceipts(contract, receipts = [], { claim, review, verifier } = {}) {
   const normalized = normalizeTaskContract(contract);
   const policies = new Map(normalized.evidencePolicies.namedChecks.map((item) => [item.id, item]));
   const errors = [];
@@ -758,43 +759,46 @@ export function validateNamedCheckReceipts(contract, evidenceReceipts = []) {
       const match = NAMED_CHECK_PATTERN.exec(locator);
       if (!match) continue;
       const policy = policies.get(match[1]);
-      const candidates = evidenceReceipts.filter((item) =>
-        item?.locator === locator && Array.isArray(item?.supportsCriterionIds)
-        && item.supportsCriterionIds.includes(criterion.id));
-      if (!candidates.length) {
-        missing = true;
-        continue;
-      }
-      if (!candidates.some((item) =>
-        item.policyDigest === policy.policyDigest
-        && item.evidenceKind === policy.evidenceKind
-        && item.executableDigest === policy.executableDigest
-        && item.argsDigest === policy.argsDigest
-        && item.workingDirectory === policy.workingDirectory)) {
-        errors.push(`NAMED_CHECK_POLICY_MISMATCH:${criterion.id}:${locator}`);
+      const candidates = receipts.filter((item) => item?.locator === locator && Array.isArray(item?.supportsCriterionIds) && item.supportsCriterionIds.includes(criterion.id));
+      if (!candidates.length) { missing = true; continue; }
+      for (const item of candidates) {
+        if (!isPlainRecord(item) || item.version !== NAMED_CHECK_RECEIPT_VERSION || item.kind !== 'task-proof-named-check-receipt') { errors.push(`NAMED_CHECK_RECEIPT_VERSION:${criterion.id}:${locator}`); continue; }
+        const expectedDigest = digestJson(withoutDigest(item));
+        if (item.receiptDigest !== expectedDigest) errors.push(`NAMED_CHECK_RECEIPT_DIGEST:${criterion.id}:${locator}`);
+        if (item.contractDigest !== digestTaskContract(normalized) || item.claimDigest !== digestJson(claim) || item.reviewDigest !== digestJson(review)) errors.push(`NAMED_CHECK_SCOPE_MISMATCH:${criterion.id}:${locator}`);
+        if (item.headSha !== claim?.repository?.headSha || item.producerRunId !== review?.reviewer?.runId) errors.push(`NAMED_CHECK_IDENTITY_MISMATCH:${criterion.id}:${locator}`);
+        if (item.policyDigest !== policy.policyDigest || item.evidenceKind !== policy.evidenceKind || item.executableDigest !== policy.executableDigest || item.argsDigest !== policy.argsDigest || item.workingDirectory !== policy.workingDirectory) errors.push(`NAMED_CHECK_POLICY_MISMATCH:${criterion.id}:${locator}`);
+        if (typeof verifier !== 'function') { missing = true; continue; }
+        let live;
+        try { live = verifier({ receipt: item, policy, criterion, contract: normalized, claim, review }); }
+        catch { missing = true; continue; }
+        if (!isPlainRecord(live) || live.ok !== true || live.receiptDigest !== expectedDigest) errors.push(`NAMED_CHECK_VERIFIER_REJECTED:${criterion.id}:${locator}`);
+        if (live?.result !== 'pass' || item.result?.status !== 'pass' || item.result?.exitCode !== 0) errors.push(`NAMED_CHECK_FAILED:${criterion.id}:${locator}`);
       }
     }
   }
-  if (errors.length) return { ok: false, errors, cap: 'FAIL' };
-  if (missing) return { ok: false, errors: ['NAMED_CHECK_RECEIPT_MISSING'], cap: 'INCONCLUSIVE' };
-  return { ok: true, errors: [], cap: 'PASS' };
+  const cap = errors.length ? 'FAIL' : missing ? 'INCONCLUSIVE' : 'PASS';
+  const output = { ok: cap === 'PASS', errors: errors.length ? errors : missing ? ['NAMED_CHECK_RECEIPT_MISSING_OR_UNVERIFIED'] : [], cap };
+  if (output.ok) Object.defineProperty(output, VERIFIED_NAMED_CHECKS, { value: true, enumerable: false });
+  return output;
 }
 
 export function sourceCoverageCap(contract) {
-  const normalized = normalizeTaskContract(contract);
-  let cap = 'PASS';
-  for (const requirement of normalized.requirements) {
-    if (requirement.disposition !== 'covered') cap = minGate(cap, 'PASS_WITH_LIMITS');
-  }
-  return cap;
+  return normalizeTaskContract(contract).requirements.some((item) => item.disposition !== 'covered') ? 'PASS_WITH_LIMITS' : 'PASS';
 }
 
-export function authorityLevelCap(contract, verifiedAuthority) {
+export function contractPolicyCap(contract) {
+  const normalized = normalizeTaskContract(contract);
+  if (!normalized.reviewPolicy.allBlockingCriteriaRequired) return 'INCONCLUSIVE';
+  if (normalized.authority.level === 'claimant_provisional') return 'INCONCLUSIVE';
+  return 'PASS';
+}
+
+export function authorityLevelCap(contract, verifiedAuthoritySet) {
   const normalized = normalizeTaskContract(contract);
   if (normalized.authority.level === 'claimant_provisional') return 'INCONCLUSIVE';
-  if (!verifiedAuthority || verifiedAuthority[VERIFIED_AUTHORITY] !== true || verifiedAuthority.ok !== true) return 'INCONCLUSIVE';
-  if (normalized.authority.level === 'user_attested') return 'PASS_WITH_LIMITS';
-  return 'PASS';
+  if (!verifiedAuthoritySet || verifiedAuthoritySet[VERIFIED_AUTHORITY_SET] !== true || verifiedAuthoritySet.ok !== true) return 'INCONCLUSIVE';
+  return normalized.authority.level === 'user_attested' ? 'PASS_WITH_LIMITS' : 'PASS';
 }
 
 export function lifecycleCap(contract) {
@@ -805,41 +809,55 @@ export function lifecycleCap(contract) {
 }
 
 export function minGate(...gates) {
-  const valid = gates.map((gate) => {
+  return gates.map((gate) => {
     if (!GATES.includes(gate)) throw new ContractAuthorityError('CONTRACT_GATE', `Unsupported gate: ${gate}`);
     return gate;
-  });
-  return valid.reduce((minimum, gate) => GATES.indexOf(gate) < GATES.indexOf(minimum) ? gate : minimum, 'PASS');
+  }).reduce((minimum, gate) => GATES.indexOf(gate) < GATES.indexOf(minimum) ? gate : minimum, 'PASS');
 }
 
 export function computeContractBoundGate({
   contract,
   claim,
   review,
-  receipt,
+  authorityReceipts = undefined,
+  receipt = undefined,
   authorityAdapter,
+  evidenceAssessment,
+  evidenceVerifier,
   evidenceGate,
-  lifecycleGate = 'PASS',
-  evidenceReceipts = [],
+  namedCheckReceipts = undefined,
+  evidenceReceipts = undefined,
+  namedCheckVerifier,
+  lifecycleAssessment,
+  lifecycleVerifier,
+  lifecycleGate,
 }) {
   const claimBinding = validateClaimContractBinding(contract, claim);
   if (!claimBinding.ok) return { gate: 'FAIL', errors: claimBinding.errors, caps: { claim: 'FAIL' } };
-  if (!review) {
-    return { gate: 'INCONCLUSIVE', errors: ['REVIEW_ARTIFACT_REQUIRED'], caps: { claim: 'PASS', review: 'INCONCLUSIVE' } };
-  }
-  const reviewBinding = validateReviewContractBinding(contract, claim, review, receipt);
-  const authority = verifyAuthorityReceipt({ contract, claim, review, receipt, adapter: authorityAdapter });
-  const namedChecks = validateNamedCheckReceipts(contract, evidenceReceipts);
+  if (!review) return { gate: 'INCONCLUSIVE', errors: ['REVIEW_ARTIFACT_REQUIRED'], caps: { claim: 'PASS', review: 'INCONCLUSIVE' } };
+  const receipts = authorityReceipts ?? (receipt ? [receipt] : []);
+  const reviewBinding = validateReviewContractBinding(contract, claim, review, receipts);
+  const authority = verifyAuthorityReceipts({ contract, claim, review, receipts, adapter: authorityAdapter });
+  const evidence = evidenceAssessment
+    ? verifyEvidenceAssessment({ contract, claim, review, assessment: evidenceAssessment, verifier: evidenceVerifier })
+    : { ok: false, errors: ['UNTRUSTED_EVIDENCE_GATE'], cap: evidenceGate === 'FAIL' || evidenceGate === 'STALE' ? evidenceGate : 'INCONCLUSIVE' };
+  const namedChecks = validateNamedCheckReceipts(contract, namedCheckReceipts ?? evidenceReceipts ?? [], { claim, review, verifier: namedCheckVerifier });
+  const artifactLifecycle = lifecycleAssessment
+    ? verifyLifecycleAssessment({ contract, claim, review, assessment: lifecycleAssessment, verifier: lifecycleVerifier })
+    : { ok: false, errors: ['UNTRUSTED_LIFECYCLE_GATE'], cap: lifecycleGate === 'FAIL' || lifecycleGate === 'STALE' ? lifecycleGate : 'INCONCLUSIVE' };
   const caps = {
-    evidence: evidenceGate,
-    authority: minGate(authorityLevelCap(contract, authority), authority.cap ?? 'INCONCLUSIVE'),
+    evidence: evidence.cap,
+    authority: minGate(authorityLevelCap(contract, authority), authority.cap),
     sourceCoverage: sourceCoverageCap(contract),
-    reviewer: reviewBinding.cap ?? 'FAIL',
+    contractPolicy: contractPolicyCap(contract),
+    reviewer: reviewBinding.cap,
     namedChecks: namedChecks.cap,
     contractLifecycle: lifecycleCap(contract),
-    artifactLifecycle: lifecycleGate,
+    artifactLifecycle: artifactLifecycle.cap,
   };
-  const errors = [...reviewBinding.errors, ...authority.errors, ...namedChecks.errors];
-  if (!reviewBinding.ok && caps.reviewer !== 'FAIL') caps.reviewer = minGate(caps.reviewer, 'INCONCLUSIVE');
-  return { gate: minGate(...Object.values(caps)), errors, caps };
+  return {
+    gate: minGate(...Object.values(caps)),
+    errors: [...reviewBinding.errors, ...authority.errors, ...evidence.errors, ...namedChecks.errors, ...artifactLifecycle.errors],
+    caps,
+  };
 }
