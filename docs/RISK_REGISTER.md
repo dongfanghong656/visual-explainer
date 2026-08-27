@@ -11,7 +11,7 @@
 | RSK-0007 | User/Issue/release/identity authority lacks trusted live or cryptographic adapters. | HIGH | OPEN_UNSUPPORTED_EXTERNAL_PASS | Repository-file authority is the alpha scope; all unsupported external authority remains `INCONCLUSIVE`. |
 | RSK-0008 | A same-name named check may change command semantics. | HIGH | MITIGATED | Public named-check adapter binding passes exact-head CI. |
 | RSK-0009 | Caller-supplied evidence/lifecycle `PASS` values can launder completion. | CRITICAL | MITIGATED | Server-owned verifiers and request-schema rejection pass exact-head CI. |
-| RSK-0010 | Contract/public PR may pass targeted tests but still regress the whole package. | HIGH | MITIGATED | PR #4 HEAD `f1f665d` passed Node 20/22 and the separate R2 package reconstruction after the first R2 run exposed and caused repair of a release-context defect. |
+| RSK-0010 | Contract/public PR may pass targeted tests but still regress the whole package. | HIGH | MITIGATED_PENDING_FINAL_R2_RERUN | PR #4 `f1f665d` passed Node 20/22 and R2; the later report-state compatibility repair has an executable regression and must pass the final exact-head run. |
 | RSK-0011 | Default installation may inherit high-severity advisories from non-core Pi/PPTX hosts. | HIGH | MITIGATED_PENDING_TAG_WORKFLOW | Both hosts are optional peers, CI omits peers, and the default production audit reports 0 vulnerabilities locally and in the repaired R2 run; repeat on the release tag. |
 
 No risk is closed merely because implementation files exist or an author-generated diagram is coherent.

@@ -17,8 +17,9 @@
 
 ## Current release blockers
 
-1. PR #4 must integrate the exact-head Node 20/22 and R2-passing stack into `main` before tagging.
-2. The GitHub prerelease asset must be installed from its public URL and rechecked before deployment is claimed.
+1. The final report-state compatibility repair must pass exact-head Node 20/22 and R2 checks.
+2. PR #4 must integrate that exact-head stack into `main` before tagging.
+3. The GitHub prerelease asset must be installed from its public URL and rechecked before deployment is claimed.
 
 ## Claims explicitly not made
 

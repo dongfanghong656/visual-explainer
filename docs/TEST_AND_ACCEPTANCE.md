@@ -20,6 +20,7 @@
 | EVD-0014 | Default production dependency advisory gate | PASS_LOCAL | `npm audit --omit=dev --omit=peer --audit-level=high` | 0 vulnerabilities; optional Pi/PPTX peers excluded from default deployment |
 | EVD-0015 | PR #4 release-delta CI and R2 failure at `93a2704` | PARTIAL | GitHub Actions run `33075935293` | Node 20/22 passed; R2 ran 106 Linux tests and MCP handshake, then rejected PR ref `4/merge` as a tag; repair is local pending exact-head rerun |
 | EVD-0016 | PR #4 repaired exact-head matrix and R2 review at `f1f665dc9e077988982401cae849c0abfdfcb25e` | PASS_WITH_LIMITS | GitHub Actions run `33077129005` | Node 20/22 and R2 passed; R2 reconstructed 7 requirements, ran 106 Linux tests, eight-tool handshakes, package install, and 0-vulnerability audit; not a different human/model |
+| EVD-0017 | Post-review decision-state R2 rerun at `2515181d701ecbfd78b6971ba9afe91a2594f929` | PARTIAL | GitHub Actions run `33077434141` | Node 20/22, release reconstruction, MCP, and audit passed; final report rejected a newly progressed authorized decision value; executable compatibility regression added |
 
 ## Contract-authority acceptance matrix
 

@@ -33,15 +33,16 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 
 - PR #4 HEAD `f1f665d` passed the release-delta exact-head Node 20 and Node 22 checks plus the separate R2 review in run `33077129005`.
 - R2 returned `PASS_WITH_LIMITS`: automated CI isolation does not prove a different human/model, and unsupported external authority adapters remain capped at `INCONCLUSIVE`.
+- The later documentation-only head `2515181` passed its matrix and R2 verification work but the final report rejected the progressed authorized release-decision state; the exact-field compatibility repair and executable regression are local pending final CI.
 - Current development and review are from the same long-running implementation context.
 - Local npm-linked and clean temporary package deployments exist; no merge, tag, public release, downloaded-asset deployment, hardware validation, scientific validation, or user-outcome observation exists yet.
 
 ## Open blockers
 
 - a different-human/model R3 review remains absent and is an accepted alpha limitation;
-- `main` integration, tag workflow, and public-asset readback remain incomplete;
+- final exact-head report CI, `main` integration, tag workflow, and public-asset readback remain incomplete;
 - RSK-0005 and RSK-0007 remain disclosed alpha limitations; unsupported external authority cannot produce `PASS`.
 
 ## Exact next action
 
-Push this R2 evidence update, require Node 20/22 plus the distinct R2 job to pass for its exact PR #4 HEAD, then merge, tag, publish, download, install, and read back the public artifact.
+Push the report-state compatibility repair, require Node 20/22 plus the distinct R2 job to pass for its exact PR #4 HEAD, then merge, tag, publish, download, install, and read back the public artifact.

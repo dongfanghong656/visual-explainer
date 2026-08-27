@@ -27,7 +27,12 @@ if (packageLock.packages?.['']?.version !== packageJson.version) {
   throw new Error('Package and lockfile versions differ.');
 }
 const releaseStatus = readFileSync(path.join(repositoryRoot, 'docs', 'RELEASE_STATUS.md'), 'utf8');
-if (!releaseStatus.includes('USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG')) {
+const releaseDecision = /^- Release decision: `([^`]+)`$/m.exec(releaseStatus)?.[1];
+const authorizedReleaseDecisions = new Set([
+  'USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG',
+  'USER_AUTHORIZED_R2_PASS_WITH_LIMITS_PENDING_MERGE_TAG',
+]);
+if (!authorizedReleaseDecisions.has(releaseDecision)) {
   throw new Error('The release decision is not explicitly authorized for review.');
 }
 

@@ -9,7 +9,7 @@
 | Packed eight-tool MCP handshake | PASS_LOCAL |
 | Default production dependency audit | PASS_LOCAL, 0 vulnerabilities |
 | Release-delta exact-head CI | Node 20/22 PASS at `f1f665d` |
-| Distinct R2 review | PASS_WITH_LIMITS at `f1f665d`, GitHub Actions run `33077129005` |
+| Distinct R2 review | Prior PASS_WITH_LIMITS at `f1f665d`; `2515181` rerun passed verification but the report rejected the progressed release-decision state; compatibility repair PASS_LOCAL, final rerun pending |
 | Main integration | PENDING |
 | GitHub prerelease | PENDING |
 | Downloaded artifact and Codex readback | PENDING |

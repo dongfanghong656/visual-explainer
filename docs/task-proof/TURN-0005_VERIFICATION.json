@@ -24,8 +24,9 @@
   },
   "remote": {
     "releaseDeltaCi": "NODE_20_22_PASS_AT_f1f665d",
-    "independentReview": "R2_PASS_WITH_LIMITS_AT_f1f665d",
-    "githubActionsRun": 33077129005,
+    "independentReview": "PRIOR_R2_PASS_WITH_LIMITS_AT_f1f665d_LATEST_REPORT_STATE_COMPATIBILITY_REPAIR_PENDING_RERUN",
+    "priorPassingGithubActionsRun": 33077129005,
+    "latestGithubActionsRun": 33077434141,
     "merge": "PENDING",
     "githubPrerelease": "PENDING",
     "downloadedArtifactReadback": "PENDING"

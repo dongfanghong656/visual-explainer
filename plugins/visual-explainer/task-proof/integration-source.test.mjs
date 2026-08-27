@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +82,24 @@ test('CI records a distinct exact-head R2 release review after the matrix passes
   assert.match(reviewer, /procedureLevel:\s*['"]R2['"]/);
   assert.match(reviewer, /verdict:\s*['"]PASS_WITH_LIMITS['"]/);
   assert.match(reviewer, /git[\s\S]*rev-parse[\s\S]*HEAD/);
+});
+
+test('R2 report accepts the authorized post-review release decision', () => {
+  const headSha = execFileSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).trim();
+  const output = execFileSync(process.execPath, [path.join(directory, 'release-review-report.mjs')], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TASK_PROOF_REVIEWED_SHA: headSha,
+      TASK_PROOF_REVIEWER_RUN_ID: 'integration-source-test',
+    },
+    windowsHide: true,
+  });
+  assert.equal(JSON.parse(output).verdict, 'PASS_WITH_LIMITS');
 });
 
 test('protocol documents state the core trust boundaries', () => {
