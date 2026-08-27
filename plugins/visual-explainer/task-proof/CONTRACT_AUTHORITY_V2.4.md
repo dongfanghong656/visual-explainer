@@ -7,16 +7,17 @@
 - Evidence assessment version: `1.0.0`
 - Named-check receipt version: `1.0.0`
 - Lifecycle assessment version: `1.0.0`
-- Implementation: `contract-authority.mjs`
+- Normalization/receipt primitives: `contract-authority.mjs`
+- Canonical final gate: `contract-final-gate.mjs`
 - Portable schema: `task-contract.schema.json`
 - Example: `examples/task-contract.example.json`
-- Integration status: isolated contract core; mandatory public MCP/Skill enforcement remains a separate task.
+- Integration status: isolated contract core; mandatory public MCP/Skill enforcement remains TASK-0007.
 
 ## Purpose
 
-A Task Proof result must not become green because the implementing agent selected an incomplete requirement subset, created a same-name but weaker test, invented a reviewer level, or passed a bare string such as `evidenceGate=PASS` into a gate calculator.
+A Task Proof result must not become green because the implementing agent selected an incomplete requirement subset, created a same-name but weaker check, replayed a receipt, invented a reviewer level, supplied a generic adapter that merely returns `ok: true`, or passed a bare string such as `evidenceGate=PASS` into a calculator.
 
-Protocol 2.4 freezes the task contract and makes every acceptance-contributing derived result verifier-bound.
+Protocol 2.4 freezes the task contract and makes every acceptance-contributing derived result verifier-bound and context-bound.
 
 ## Trust chain
 
@@ -37,6 +38,8 @@ Trusted named-check receipts
   ↓ policy, executable, arguments, cwd, result, reviewer, Claim HEAD
 Trusted lifecycle assessment
   ↓ implementation/release/deployment state verifier
+Strict orchestration boundary
+  ↓ rejects unknown receipts and context-free verifiers
 Minimum final gate
 ```
 
@@ -54,9 +57,11 @@ This does not prove that a model extracted every requirement from unstructured s
 
 ## Authority receipt set
 
-A final authority result verifies one receipt for every declared source. Each receipt binds the contract, source, repository, implementation base, exact Claim HEAD, final reviewer run, chronology, source digest, adapter identity, and adapter receipt. Repository sources additionally bind ancestry, unchanged implementation scope, safe Git configuration, regular-file type, symlink status, and size.
+A final authority result verifies exactly one receipt for every declared source. Each receipt binds the contract, source, repository, implementation base, exact Claim HEAD, final reviewer run, chronology, source digest, adapter identity, and adapter receipt. Repository sources additionally bind ancestry, unchanged implementation scope, safe Git configuration, regular-file type, symlink status, and size.
 
-A missing source receipt is `INCONCLUSIVE`; a duplicate, tampered, wrong-HEAD, wrong-reviewer, adapter-rejected, or source-mismatched receipt is `FAIL`.
+A missing source receipt is `INCONCLUSIVE`; an unknown, extra, duplicate, tampered, wrong-HEAD, wrong-reviewer, adapter-rejected, or source-mismatched receipt is `FAIL`.
+
+The strict orchestrator additionally requires adapter output to repeat the exact contract digest, source ID/digest, Claim HEAD, and reviewer run. A generic function that merely returns `ok: true` cannot authorize acceptance.
 
 ## Review binding
 
@@ -66,26 +71,35 @@ A standalone R-level assertion is never a Review artifact.
 
 ## Verifier-bound derived evidence
 
-Protocol 2.4 does not trust caller-supplied strings for evidence or lifecycle status. Evidence and lifecycle assessments contain contract, Claim, and Review digests and must be accepted by trusted verifier callbacks. A bare `PASS` string can only yield `INCONCLUSIVE`; conservative `FAIL` or `STALE` values may still lower a gate.
+Protocol 2.4 does not trust caller-supplied strings for evidence or lifecycle status. Evidence and lifecycle assessments contain contract, Claim, and Review digests and must be accepted by trusted verifier callbacks. The strict orchestrator also requires verifier output to repeat those exact digests. A bare `PASS` string can only yield `INCONCLUSIVE`; conservative `FAIL` or `STALE` values may still lower a gate.
 
-Named-check receipts likewise require a trusted verifier, exact policy/executable/argument/cwd digests, exact reviewer and Claim HEAD, and a passing result with exit code zero.
+Named-check receipts likewise require a trusted verifier, exact policy/executable/argument/cwd digests, exact reviewer and Claim HEAD, and a passing result with exit code zero. The strict orchestrator rejects receipts for unknown policies or criteria and requires verifier output to bind contract, Claim, Review, HEAD, and reviewer.
 
 ## Final gate
 
+Public or release-adjacent callers must use:
+
+```text
+computeStrictContractGate(...)
+from contract-final-gate.mjs
+```
+
+The lower-level calculator in `contract-authority.mjs` is an internal primitive for unit composition and must not be exposed directly through MCP or Skill adapters.
+
 ```text
 finalGate = minimum(
-  verifiedEvidenceCap,
-  verifiedAuthorityCap,
-  sourceCoverageCap,
-  contractPolicyCap,
-  reviewerCap,
-  verifiedNamedCheckCap,
-  contractLifecycleCap,
-  verifiedArtifactLifecycleCap
+  verified evidence,
+  verified authority,
+  source coverage,
+  contract policy,
+  reviewer procedure,
+  verified named checks,
+  contract lifecycle,
+  verified artifact lifecycle
 )
 ```
 
-Results are `PASS`, `PASS_WITH_LIMITS`, `INCONCLUSIVE`, `STALE`, or `FAIL`. Missing review, adapter, receipt, evidence verifier, named-check verifier, or lifecycle verifier is inconclusive. Digest, identity, chronology, policy, source, or explicit verifier rejection is failure.
+Results are `PASS`, `PASS_WITH_LIMITS`, `INCONCLUSIVE`, `STALE`, or `FAIL`. Missing review, adapter, receipt, evidence verifier, named-check verifier, or lifecycle verifier is inconclusive. Digest, identity, chronology, policy, source, unknown receipt, or explicit trusted-verifier rejection is failure.
 
 ## Lifecycle and amendments
 
