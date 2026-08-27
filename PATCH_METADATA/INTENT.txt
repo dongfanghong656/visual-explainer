@@ -1,1 +1,1 @@
-DELETE_ME
+This should be removed with delete_file, not retained.
