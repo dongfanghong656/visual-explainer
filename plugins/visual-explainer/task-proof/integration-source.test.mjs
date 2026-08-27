@@ -16,15 +16,17 @@ function parse(relativePath) {
   return JSON.parse(read(relativePath));
 }
 
-test('dedicated Task Proof MCP exposes the stable six-tool contract', () => {
+test('dedicated Task Proof MCP exposes the stable eight-tool contract', () => {
   const names = TOOL_DEFINITIONS.map((tool) => tool.name).sort();
   assert.deepEqual(names, [
     'task_proof_claim',
+    'task_proof_contract_source_receipt',
     'task_proof_probe',
     'task_proof_review',
     'task_proof_run_checks',
     'task_proof_snapshot',
     'task_proof_validate_claim',
+    'task_proof_validate_contract',
   ]);
   for (const tool of TOOL_DEFINITIONS) {
     assert.equal(tool.inputSchema?.type, 'object');
@@ -40,7 +42,12 @@ test('plugin contains discoverable skill and claimant/reviewer commands', () => 
   assert.match(skill, /claimant/i);
   assert.match(skill, /reviewer/i);
   assert.match(claimCommand, /UNVERIFIED/i);
+  assert.match(claimCommand, /task_proof_validate_contract/);
   assert.match(reviewCommand, /independent/i);
+  assert.match(reviewCommand, /task_proof_contract_source_receipt/);
+  assert.match(reviewCommand, /contractGate/);
+  assert.match(skill, /PROVISIONAL CONTRACT/i);
+  assert.match(skill, /contractGate/);
 });
 
 test('repository-owned check policy controls evidence kinds and strict test discovery', () => {

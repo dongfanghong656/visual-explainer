@@ -32,6 +32,8 @@ try {
     'task_proof_snapshot',
     'task_proof_probe',
     'task_proof_run_checks',
+    'task_proof_validate_contract',
+    'task_proof_contract_source_receipt',
     'task_proof_validate_claim',
     'task_proof_claim',
     'task_proof_review',

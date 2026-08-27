@@ -31,8 +31,10 @@ for (const filename of sourceFiles) {
 
 const jsonFiles = [
   path.join(directory, 'task-proof.schema.json'),
+  path.join(directory, 'task-contract.schema.json'),
   path.join(repositoryRoot, '.task-proof', 'checks.json'),
   path.join(directory, 'examples', 'scroll-restoration.review.json'),
+  path.join(directory, 'examples', 'task-contract.example.json'),
 ];
 for (const filename of jsonFiles) JSON.parse(readFileSync(filename, 'utf8'));
 
