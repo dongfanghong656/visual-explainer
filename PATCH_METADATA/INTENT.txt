@@ -1,1 +1,1 @@
-This should be removed with delete_file, not retained.
+REMOVE_THIS_FILE
