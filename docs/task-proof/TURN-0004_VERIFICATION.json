@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "turnId": "TURN-0004",
+  "pullRequest": 4,
+  "branch": "stage/task-proof-visualizer/turn-0004-public-enforcement",
+  "resultRevision": "PENDING_SELF_REFERENCE",
+  "localVerification": {
+    "syntaxChecked": 36,
+    "jsonChecked": 5,
+    "testFiles": 16,
+    "tests": 104,
+    "passed": 100,
+    "failed": 0,
+    "skipped": 4,
+    "checkoutStdioHandshake": "PASS",
+    "linkedBinaryStdioHandshake": "PASS",
+    "packageDryRunEntries": 94,
+    "status": "PASS_WITH_WINDOWS_CAPABILITY_SKIPS"
+  },
+  "remoteVerification": {
+    "requiredChecks": ["Node 20", "Node 22"],
+    "requiredHead": "exact final pull-request head",
+    "status": "POST_COMMIT_READBACK_REQUIRED"
+  },
+  "independentReview": "NOT_ASSESSED",
+  "localDeployment": "PASS",
+  "merge": "NOT_MERGED",
+  "release": "NOT_RELEASED"
+}

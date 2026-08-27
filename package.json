@@ -1,15 +1,15 @@
 {
   "name": "visual-explainer",
-  "version": "0.10.0",
-  "description": "Agent skill that generates beautiful HTML pages for diagrams, diff reviews, plan reviews, slide decks, and data tables",
+  "version": "0.11.0-alpha.1",
+  "description": "Agent skill and local MCP for visual explanations, evidence-gated AI task-completion claims, and independent reviews",
   "license": "MIT",
-  "homepage": "https://github.com/nicobailon/visual-explainer#readme",
+  "homepage": "https://github.com/dongfanghong656/visual-explainer#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nicobailon/visual-explainer.git"
+    "url": "git+https://github.com/dongfanghong656/visual-explainer.git"
   },
   "bugs": {
-    "url": "https://github.com/nicobailon/visual-explainer/issues"
+    "url": "https://github.com/dongfanghong656/visual-explainer/issues"
   },
   "keywords": [
     "agent-skill",
@@ -32,7 +32,11 @@
     "slides",
     "pptx",
     "powerpoint",
-    "mermaid"
+    "mermaid",
+    "task-proof",
+    "ai-completion",
+    "evidence-gated",
+    "independent-review"
   ],
   "files": [
     "plugins/visual-explainer",
@@ -46,16 +50,26 @@
   ],
   "bin": {
     "visual-explainer-mcp": "./plugins/visual-explainer/mcp/server.mjs",
-    "visual-explainer-pptx": "./plugins/visual-explainer/pptx/export.mjs"
+    "visual-explainer-pptx": "./plugins/visual-explainer/pptx/export.mjs",
+    "visual-explainer-task-proof-mcp": "./plugins/visual-explainer/task-proof/mcp-server.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "node-html-parser": "^9.0.1",
-    "pptxgenjs": "^4.0.1",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "pptxgenjs": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "pptxgenjs": {
+      "optional": true
+    }
   },
   "pi": {
     "extensions": [
@@ -68,5 +82,16 @@
       "./plugins/visual-explainer/commands"
     ],
     "image": "./banner.png"
+  },
+  "scripts": {
+    "check:task-proof": "node plugins/visual-explainer/task-proof/verify-source.mjs",
+    "test:task-proof": "node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs",
+    "test:task-proof:mcp": "node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs",
+    "test:release-package": "node plugins/visual-explainer/task-proof/release-package-smoke.mjs",
+    "verify:task-proof": "npm run check:task-proof && npm run test:task-proof && npm run test:task-proof:mcp",
+    "verify:release": "npm run verify:task-proof && npm run test:release-package"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

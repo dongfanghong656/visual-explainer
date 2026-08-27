@@ -1,0 +1,397 @@
+{
+  "schemaVersion": "1.0.0",
+  "turnId": "TURN-0001",
+  "date": "2026-08-25",
+  "repository": "dongfanghong656/visual-explainer",
+  "branch": "chat/task-proof-visualizer/v0.1.0",
+  "baseRevision": "df35d97a00191d8aba831e757a65dd6ce0514fc0",
+  "resultRevision": "PENDING_SELF_REFERENCE",
+  "capabilityState": "READ_WRITE_ATOMIC",
+  "purpose": "Implement an evidence-gated Task Proof Skill/MCP author declaration and independent reviewer workflow on the visual-explainer fork.",
+  "readSet": [
+    {
+      "repository": "nicobailon/visual-explainer",
+      "ref": "df35d97a00191d8aba831e757a65dd6ce0514fc0",
+      "paths": [
+        "README.md",
+        "CHANGELOG.md",
+        "package.json",
+        ".gitignore",
+        ".claude-plugin/*",
+        "plugins/visual-explainer/.claude-plugin/plugin.json",
+        "plugins/visual-explainer/SKILL.md",
+        "plugins/visual-explainer/commands/{project-recap,diff-review,fact-check}.md",
+        "plugins/visual-explainer/mcp/{README.md,server.mjs}",
+        "plugins/visual-explainer/extension.ts"
+      ]
+    },
+    {
+      "repository": "dongfanghong656/github-project-continuity-marketplace",
+      "ref": "refs/tags/v0.2.0",
+      "paths": [
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/SKILL.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/WORKFLOW.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/GITHUB_OPERATIONS.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/REPOSITORY_CONTRACT.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/STATUS_AND_EVIDENCE_MODEL.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/CONSISTENCY_GATES.md",
+        "plugins/github-project-continuity/skills/github-conversation-artifact-manager/references/LONG_CONVERSATION_RECOVERY.md"
+      ]
+    }
+  ],
+  "writeSet": [
+    {
+      "path": ".ai/PROJECT_STATE.json",
+      "sha256": "c8f4d26f09bf968e4dbd00b013f57a88faa6ef765b16d58120c2e7c2e1da5aee",
+      "size": 2338
+    },
+    {
+      "path": ".ai/PROJECT_STATE.schema.json",
+      "sha256": "a43cc9fbe07cd926eef9241ae9c43457980f1303708ab1ad1d98a4a8851cedce",
+      "size": 5894
+    },
+    {
+      "path": ".ai/README.md",
+      "sha256": "c30d8bde51940eac17dbfcc28c10fa932397a2856d5dc45ec9b51d45a30dd1fe",
+      "size": 933
+    },
+    {
+      "path": ".claude-plugin/marketplace.json",
+      "sha256": "514d449823da0dc39ff0d88e7e313279d325ec038063debb4cf715f16fa98fc5",
+      "size": 1076
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "sha256": "1fca4c38180192d50d82ad80489dd915da40fedd4fafc6aa5553c46e489b2247",
+      "size": 153
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "71a87bf8c1b5dfc66218965fabd9a85f74fc6472077cdfded388e241881a99b2",
+      "size": 59
+    },
+    {
+      "path": "AGENTS.md",
+      "sha256": "974bcd8268a3971019bead7f62a6a24dbaf9b2cfa39c5d855a78141828e15622",
+      "size": 970
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "9c715f391dd55d5425b1771db22b0b5ab3f419477f1bb7732cbb7a959e1c92b9",
+      "size": 26023
+    },
+    {
+      "path": "PROJECT_AGENT.md",
+      "sha256": "2f5f4c04e195d212d480ba8957e976b82ec678527aa53f50197f6b88af4af7b6",
+      "size": 6136
+    },
+    {
+      "path": "README.md",
+      "sha256": "8656b39a0110247df9823bdc2badda74f4d46db98d72df3c95318701fa533c1b",
+      "size": 20333
+    },
+    {
+      "path": "docs/00_PROJECT_CHARTER.md",
+      "sha256": "e6953d37f2950559bd218f19c05c3e320bb18e07e41859d69b89bc1968731c90",
+      "size": 2924
+    },
+    {
+      "path": "docs/ARTIFACT_REGISTRY.md",
+      "sha256": "fd65584ec19936eaae754d4ebee5cc2616081958bd1e12bcf8fbf3e2372c2d0b",
+      "size": 1629
+    },
+    {
+      "path": "docs/CLAIM_LEDGER.md",
+      "sha256": "bff3136692409652c3f274e4a82c3e10e3f98c6f638cc01b65afe1f5c1d9972d",
+      "size": 1136
+    },
+    {
+      "path": "docs/DECISION_REGISTER.md",
+      "sha256": "eb984ffeaa38ddc6a5e732ffe3c9b406c71bfd72aad8654c3d2fb20ecfe4926c",
+      "size": 1725
+    },
+    {
+      "path": "docs/HANDOFF.md",
+      "sha256": "3d353edeecd59c36dfa2e908c90b4cba1e357f0be51fc2d00d840cf1ed40a996",
+      "size": 2037
+    },
+    {
+      "path": "docs/PROJECT_PLAN.md",
+      "sha256": "c82dba1fdac17133b5bf7c051147664b0279c745fb3b82d2a78edc250fbbc542",
+      "size": 2109
+    },
+    {
+      "path": "docs/RELEASE_STATUS.md",
+      "sha256": "0ecd95c7f2473ef15b63c731549b0621604f0a7c5939a239d01ea56fd593b2c9",
+      "size": 1311
+    },
+    {
+      "path": "docs/RISK_REGISTER.md",
+      "sha256": "d3d102f6094ef225896dd9af072127d60054076d3fcf7101b461cbe3da8bdea7",
+      "size": 1222
+    },
+    {
+      "path": "docs/TEST_AND_ACCEPTANCE.md",
+      "sha256": "aa434a241ed28103b586fde52d7c4ea40e1fd5cb3121d88c9cbf644fd611b3d4",
+      "size": 3966
+    },
+    {
+      "path": "docs/TRACEABILITY_MATRIX.md",
+      "sha256": "37516ccd3ee5d6c376321c7838c37ba558b62dbeb2f7aa075a42adfaa6aaad86",
+      "size": 1358
+    },
+    {
+      "path": "docs/checkpoints/CHK-0001.md",
+      "sha256": "70a0fffb692342fadf7aa2f6e78d6550e05c185bd7ad055ff1e63344ff2fc0d6",
+      "size": 1321
+    },
+    {
+      "path": "docs/checkpoints/README.md",
+      "sha256": "a42fad73de2040cc4883f0ab28ca909dc0e192b5c9e1b1970e1612f443162e45",
+      "size": 247
+    },
+    {
+      "path": "docs/requirements/MASTER_REQUIREMENTS.md",
+      "sha256": "41c5357a417f4c8caff4e69673020507f0e12946351b054e03b98dd6cf93a491",
+      "size": 1034
+    },
+    {
+      "path": "docs/requirements/REQ-0001.md",
+      "sha256": "4871481d4c2c9db70b0a5793527557d901fafbbbc88dae47d01e5f8f61f950be",
+      "size": 1618
+    },
+    {
+      "path": "docs/requirements/REQ-0002.md",
+      "sha256": "8a4ebb2d89dcfd503eb21c61e5b6820ea0c8ba0839f5558603db52a917f28094",
+      "size": 1573
+    },
+    {
+      "path": "docs/requirements/REQ-0003.md",
+      "sha256": "c73e4fedaaa149ead9eac1416a2b4fea6d926f9b7262f700f90ae716eb709988",
+      "size": 1469
+    },
+    {
+      "path": "docs/requirements/REQ-0004.md",
+      "sha256": "5974659bfd650860e3aa36629088843b614ebf3760738643d5edf73fa0244cfc",
+      "size": 1274
+    },
+    {
+      "path": "docs/requirements/REQ-0005.md",
+      "sha256": "7934fd16916c5ea86ea8362a12512f4d868dc4b83bb6fe8cbfbf0d0778ddee87",
+      "size": 1365
+    },
+    {
+      "path": "docs/specs/MASTER_SPEC.md",
+      "sha256": "c1f3384edebe01bea8fe5b7f0e117b2942f4d68a4f0e0a72b528cac2dccb1eaf",
+      "size": 434
+    },
+    {
+      "path": "docs/specs/SPEC-0001.md",
+      "sha256": "474ac96add1f3c4c463bb98a3ac243b579c2813301284e87a132534f4a0668ad",
+      "size": 7540
+    },
+    {
+      "path": "docs/tasks/MASTER_TASKS.md",
+      "sha256": "9f4c2977e60a32e58523c2e53a43edc975c1388552f21555e52af06505b9c1fb",
+      "size": 882
+    },
+    {
+      "path": "docs/tasks/TASK-0001.md",
+      "sha256": "5da61ca2457a8eef78b0ed495f06fec7bd66c574a040dd64d207e28f83446896",
+      "size": 936
+    },
+    {
+      "path": "docs/tasks/TASK-0002.md",
+      "sha256": "0c2cc5c5dbc861de4f4da02de841d668043764559bf8d18dbf4f0d08d800f8c6",
+      "size": 708
+    },
+    {
+      "path": "docs/tasks/TASK-0003.md",
+      "sha256": "9538666667ef61187fb583aae185f0b13a7fc4a96ec19f3c1fd32d5a5f5cfef3",
+      "size": 827
+    },
+    {
+      "path": "docs/tasks/TASK-0004.md",
+      "sha256": "c8d0a8f007822319998ab59fe38e2bfeb3d886b07c236fe8dd5feba46985ff11",
+      "size": 929
+    },
+    {
+      "path": "docs/tasks/TASK-0005.md",
+      "sha256": "7a64376f3e7813e353fd4cb654b86d14a3605169d72998ee0c6366d731e5011a",
+      "size": 1512
+    },
+    {
+      "path": "docs/turns/2026/08/TURN-0001.md",
+      "sha256": "84baca28177340bd7e4cc835240ee87f1e242a0262a64588c55bda49a7be8593",
+      "size": 2914
+    },
+    {
+      "path": "docs/turns/INDEX.md",
+      "sha256": "c07ae9d7e4c885408e9d3ed7f4baa7a3d96f22ccb6a7cb0e7e8bf6a88633c34e",
+      "size": 386
+    },
+    {
+      "path": "docs/turns/manifests/TURN-0001.json",
+      "sha256": "PENDING_SELF_REFERENCE",
+      "size": null
+    },
+    {
+      "path": "package.json",
+      "sha256": "20f15aa84df4ea647ea3e48492d6e0b61424aa88ccf4dfec6c839b9bae0141f8",
+      "size": 2203
+    },
+    {
+      "path": "plugins/visual-explainer/.claude-plugin/plugin.json",
+      "sha256": "631751e3a07ef21652d7134cd84c5c6a2d58e09040dc9212ffaa572497c6142a",
+      "size": 313
+    },
+    {
+      "path": "plugins/visual-explainer/SKILL.md",
+      "sha256": "cd432eccbf2b84ffbe057d269bcdb0898197ff869a296aaf656878cff234b861",
+      "size": 16227
+    },
+    {
+      "path": "plugins/visual-explainer/commands/task-proof-review.md",
+      "sha256": "e40f61b2cc8de934134376fe23cc7d5c5a6acea3582c4eb41d215c14e066ce59",
+      "size": 5395
+    },
+    {
+      "path": "plugins/visual-explainer/commands/task-proof.md",
+      "sha256": "687aaa6d35bb4d9971876962a81465bc8033cd93d86e4c264c1c790b6448b188",
+      "size": 5323
+    },
+    {
+      "path": "plugins/visual-explainer/mcp/README.md",
+      "sha256": "367d6d9063ae02866367ee58989ba80959ede72fc57783451961f6c4f24ecafb",
+      "size": 3430
+    },
+    {
+      "path": "plugins/visual-explainer/mcp/server.mjs",
+      "sha256": "2427f3120f6509f0a803f9ed4a77dfe4a6753d2cef11983cfa4cf10ee91fa6b6",
+      "size": 25811
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/PROTOCOL.md",
+      "sha256": "0ccdb0c0d67bbe0ecfafd4643ddea167c9db2dd04fefe40f3fad0b9ee0c10640",
+      "size": 6915
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/README.md",
+      "sha256": "a22872cc836aef5d8a53bf5b06fea0d359c53f31c4b3475916a49b90953ab083",
+      "size": 978
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/examples/scroll-restoration.claim.json",
+      "sha256": "35a4a2292bd60684e365b5c0ed20f8b5e43cc66043e8c9e0302bbba7d70a7063",
+      "size": 10657
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/examples/scroll-restoration.review.json",
+      "sha256": "1f6601d9655ba60d3af35d40277a3b2429e0135ff8ffb08340827895e01a07da",
+      "size": 7643
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/git-snapshot.mjs",
+      "sha256": "404c27a3d632d0645d31c308d574c97068fd23e244320d059f8519a786777e97",
+      "size": 6073
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/git-snapshot.test.mjs",
+      "sha256": "debcb439f92483f43cb8d766dbc1855bd19fe60b12f89cd033e224361c75e0a7",
+      "size": 2274
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/integration-source.test.mjs",
+      "sha256": "00fe6d4ba77867c8d673c3ad5e8f0518309fc15f19cfeb3dd9011d3dd143981d",
+      "size": 3144
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/render.mjs",
+      "sha256": "ea5ba79dcbd7ddee9d028b624800729a630e3e693ded1bb9eb531ca942a2c812",
+      "size": 23788
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/schema.json",
+      "sha256": "b54433275d9d78c050f10663b3324a378ee22a077a48bdfb3121948827fb43a0",
+      "size": 18581
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/task-proof.test.mjs",
+      "sha256": "03856dd39664614c42d3f7d3ae9b3b2c9f93c671ead8dd0243deacc0186c0832",
+      "size": 12056
+    },
+    {
+      "path": "plugins/visual-explainer/task-proof/validation.mjs",
+      "sha256": "ca1f93ed750e92120ff0af2d61dab6dbad203251ecee56ecb47dda5d5f7e8e08",
+      "size": 37569
+    }
+  ],
+  "stableIds": {
+    "requirements": [
+      "REQ-0001",
+      "REQ-0002",
+      "REQ-0003",
+      "REQ-0004",
+      "REQ-0005"
+    ],
+    "specs": [
+      "SPEC-0001"
+    ],
+    "tasks": [
+      "TASK-0001",
+      "TASK-0002",
+      "TASK-0003",
+      "TASK-0004",
+      "TASK-0005"
+    ],
+    "artifacts": [
+      "ART-0001",
+      "ART-0002",
+      "ART-0003",
+      "ART-0004",
+      "ART-0005"
+    ],
+    "evidence": [
+      "EVD-0001",
+      "EVD-0002",
+      "EVD-0003",
+      "EVD-0004",
+      "EVD-0005"
+    ],
+    "decisions": [
+      "DEC-0001",
+      "DEC-0002",
+      "DEC-0003",
+      "DEC-0004"
+    ],
+    "risks": [
+      "RSK-0001",
+      "RSK-0002",
+      "RSK-0003",
+      "RSK-0004"
+    ],
+    "checkpoints": [
+      "CHK-0001"
+    ],
+    "turns": [
+      "TURN-0001"
+    ],
+    "releases": [
+      "REL-0001"
+    ]
+  },
+  "evidenceSummary": {
+    "nodeTests": "34 passed, 0 failed; syntax checks passed, including static MCP registration/resource/metadata/persistence-order checks",
+    "gitSnapshot": "temporary-repository integration test passed, including rename, dirty digest change, untracked content, and workspace escape rejection",
+    "jsonSchema": "Draft 2020-12 schema and claim/review examples validated; project state validated; all project JSON parsed",
+    "browser": "claim and review rendered in system Chromium at 1440x1000 with no horizontal overflow or console/page errors; review displayed 10/10 logic subjects",
+    "packageAndSecrets": "npm pack dry-run included 22 files and all required Task Proof paths; 57-file local secret-pattern scan found 0 matches",
+    "mcpRuntime": "BLOCKED: runtime import reported ERR_MODULE_NOT_FOUND for '@modelcontextprotocol/server'; stdio handshake not assessed"
+  },
+  "syncState": "SYNCED",
+  "commitSha": "PENDING_SELF_REFERENCE",
+  "notes": [
+    "The manifest cannot contain its own final hash or commit SHA in the same atomic commit; reconcile on the next managed turn.",
+    "Post-commit GitHub readback is required before the managing agent may report SYNCED."
+  ]
+}

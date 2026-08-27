@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0.0",
+  "turnId": "TURN-0005",
+  "baseRevision": "2a6dab262f49c7d4c0abf6d5f78a38825761022f",
+  "resultRevision": "PENDING_SELF_REFERENCE",
+  "local": {
+    "syntaxModules": 39,
+    "jsonContracts": 5,
+    "strictTests": {
+      "total": 106,
+      "passed": 102,
+      "failed": 0,
+      "skippedWindowsCapabilities": 4
+    },
+    "checkoutMcpHandshake": "PASS",
+    "packedArtifactInstall": "PASS",
+    "packedArtifactFiles": 97,
+    "packedArtifactTools": 8,
+    "defaultProductionAudit": {
+      "command": "npm audit --omit=dev --omit=peer --audit-level=high",
+      "result": "PASS",
+      "vulnerabilities": 0
+    }
+  },
+  "remote": {
+    "releaseDeltaCi": "NODE_20_22_PASS_AT_f1f665d",
+    "independentReview": "PRIOR_R2_PASS_WITH_LIMITS_AT_f1f665d_LATEST_REPORT_STATE_COMPATIBILITY_REPAIR_PENDING_RERUN",
+    "priorPassingGithubActionsRun": 33077129005,
+    "latestGithubActionsRun": 33077434141,
+    "merge": "PENDING",
+    "githubPrerelease": "PENDING",
+    "downloadedArtifactReadback": "PENDING"
+  }
+}

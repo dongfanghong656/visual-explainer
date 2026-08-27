@@ -1,0 +1,99 @@
+name: Task Proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/task-proof.yml'
+      - '.task-proof/**'
+      - 'TASK_PROOF.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release.yml'
+      - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/skills/task-proof/**'
+      - 'plugins/visual-explainer/commands/task-proof*.md'
+      - 'docs/task-proof/**'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/task-proof.yml'
+      - '.task-proof/**'
+      - 'TASK_PROOF.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release.yml'
+      - 'plugins/visual-explainer/task-proof/**'
+      - 'plugins/visual-explainer/skills/task-proof/**'
+      - 'plugins/visual-explainer/commands/task-proof*.md'
+      - 'docs/task-proof/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task-proof-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install declared dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --omit=peer --no-audit --no-fund
+      - name: Verify syntax and machine-readable contracts
+        run: npm run check:task-proof
+      - name: Run core and adversarial tests
+        env:
+          TASK_PROOF_ALLOW_EXECUTION: '1'
+        run: node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
+      - name: Verify MCP tool contract and real stdio handshake
+        run: node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs
+
+  independent-release-review:
+    name: Independent R2 release review
+    if: github.event_name == 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact reviewed head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked default dependencies
+        run: npm ci --ignore-scripts --omit=peer --no-audit --no-fund
+      - name: Reconstruct and execute release acceptance independently
+        env:
+          TASK_PROOF_ALLOW_EXECUTION: '1'
+        run: npm run verify:release
+      - name: Recheck default production advisories
+        run: npm audit --omit=dev --omit=peer --audit-level=high
+      - name: Record exact-head R2 review
+        env:
+          TASK_PROOF_REVIEWED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TASK_PROOF_REVIEWER_RUN_ID: github-actions-${{ github.run_id }}-${{ github.run_attempt }}
+        run: node plugins/visual-explainer/task-proof/release-review-report.mjs

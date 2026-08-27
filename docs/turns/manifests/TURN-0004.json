@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "turnId": "TURN-0004",
+  "date": "2026-08-27",
+  "repository": "dongfanghong656/visual-explainer",
+  "branch": "stage/task-proof-visualizer/turn-0004-public-enforcement",
+  "baseRevision": "598006bc322cb7cb220085c63f46a71a263f4636",
+  "resultRevision": "PENDING_SELF_REFERENCE",
+  "checkpoint": "CHK-0004",
+  "draftPullRequest": 4,
+  "contractProtocol": "2.4.0",
+  "publicEnforcement": "1.0.0",
+  "artifacts": [
+    "plugins/visual-explainer/task-proof/trusted-adapter-registry.mjs",
+    "plugins/visual-explainer/task-proof/contract-public-review.mjs",
+    "plugins/visual-explainer/task-proof/mcp-server.mjs",
+    "plugins/visual-explainer/task-proof/mcp-handshake.mjs",
+    "plugins/visual-explainer/skills/task-proof/SKILL.md",
+    "plugins/visual-explainer/commands/task-proof.md",
+    "plugins/visual-explainer/commands/task-proof-review.md"
+  ],
+  "verification": {
+    "syntaxChecked": 36,
+    "jsonChecked": 5,
+    "strictTests": { "tests": 104, "passed": 100, "failed": 0, "skipped": 4 },
+    "checkoutStdioHandshake": "PASS",
+    "linkedBinaryStdioHandshake": "PASS",
+    "packageDryRunEntries": 94,
+    "remoteNode20": "POST_COMMIT_READBACK_REQUIRED",
+    "remoteNode22": "POST_COMMIT_READBACK_REQUIRED",
+    "independentReview": "NOT_ASSESSED"
+  },
+  "localDeployment": "NPM_LINKED_DEVELOPMENT_DEPLOYMENT",
+  "merge": "NOT_MERGED",
+  "release": "NOT_RELEASED",
+  "sync": "LOCAL_VERIFIED_PENDING_COMMIT_AND_REMOTE_CI"
+}

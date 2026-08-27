@@ -4,7 +4,6 @@ import { mkdir, readFile } from "node:fs/promises";
 import { dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "node-html-parser";
-import pptxgen from "pptxgenjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const SLIDE_W = 13.333;
@@ -287,8 +286,20 @@ function addFallbackPanel(slide) {
   });
 }
 
-function renderPptx(slides, outputPath) {
-  const pptx = new pptxgen();
+async function loadPptxGen() {
+  try {
+    return (await import("pptxgenjs")).default;
+  } catch (error) {
+    if (error?.code === "ERR_MODULE_NOT_FOUND" && String(error.message).includes("pptxgenjs")) {
+      throw new Error("The optional PPTX dependency is not installed. Install pptxgenjs@^4.0.1 before using visual-explainer-pptx.");
+    }
+    throw error;
+  }
+}
+
+async function renderPptx(slides, outputPath) {
+  const PptxGenJS = await loadPptxGen();
+  const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "visual-explainer";
   pptx.company = "visual-explainer";

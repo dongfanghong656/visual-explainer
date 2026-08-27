@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Verify and publish GitHub prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --omit=peer --no-audit --no-fund
+      - name: Verify source, tests, MCP, and packed installation
+        env:
+          TASK_PROOF_ALLOW_EXECUTION: '1'
+        run: npm run verify:release
+      - name: Check production dependency advisories
+        run: npm audit --omit=dev --omit=peer --audit-level=high
+      - name: Build release artifact
+        shell: bash
+        run: |
+          mkdir -p release-artifacts
+          npm pack --pack-destination release-artifacts
+          test -f "release-artifacts/visual-explainer-${GITHUB_REF_NAME#v}.tgz"
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          "release-artifacts/visual-explainer-${GITHUB_REF_NAME#v}.tgz"
+          --repo "$GITHUB_REPOSITORY"
+          --title "Visual Explainer $GITHUB_REF_NAME"
+          --generate-notes
+          --prerelease
+          --verify-tag

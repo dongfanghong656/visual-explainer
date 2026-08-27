@@ -1,0 +1,165 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TOOL_DEFINITIONS } from './mcp-server.mjs';
+
+const directory = path.dirname(fileURLToPath(import.meta.url));
+const repositoryRoot = path.resolve(directory, '..', '..', '..');
+
+function read(relativePath) {
+  return readFileSync(path.join(repositoryRoot, relativePath), 'utf8');
+}
+
+function parse(relativePath) {
+  return JSON.parse(read(relativePath));
+}
+
+test('dedicated Task Proof MCP exposes the stable eight-tool contract', () => {
+  const names = TOOL_DEFINITIONS.map((tool) => tool.name).sort();
+  assert.deepEqual(names, [
+    'task_proof_claim',
+    'task_proof_contract_source_receipt',
+    'task_proof_probe',
+    'task_proof_review',
+    'task_proof_run_checks',
+    'task_proof_snapshot',
+    'task_proof_validate_claim',
+    'task_proof_validate_contract',
+  ]);
+  for (const tool of TOOL_DEFINITIONS) {
+    assert.equal(tool.inputSchema?.type, 'object');
+    assert.equal(tool.inputSchema?.additionalProperties, false);
+  }
+});
+
+test('plugin contains discoverable skill and claimant/reviewer commands', () => {
+  const skill = read('plugins/visual-explainer/skills/task-proof/SKILL.md');
+  const claimCommand = read('plugins/visual-explainer/commands/task-proof.md');
+  const reviewCommand = read('plugins/visual-explainer/commands/task-proof-review.md');
+  assert.match(skill, /Task Proof/i);
+  assert.match(skill, /claimant/i);
+  assert.match(skill, /reviewer/i);
+  assert.match(claimCommand, /UNVERIFIED/i);
+  assert.match(claimCommand, /task_proof_validate_contract/);
+  assert.match(reviewCommand, /independent/i);
+  assert.match(reviewCommand, /task_proof_contract_source_receipt/);
+  assert.match(reviewCommand, /contractGate/);
+  assert.match(skill, /PROVISIONAL CONTRACT/i);
+  assert.match(skill, /contractGate/);
+});
+
+test('repository-owned check policy controls evidence kinds and strict test discovery', () => {
+  const policy = parse('.task-proof/checks.json');
+  assert.equal(policy.version, 1);
+  assert.ok(policy.checks.length >= 2);
+  const tests = policy.checks.find((check) => check.id === 'task-proof-tests');
+  assert.equal(tests.kind, 'test');
+  assert.equal(tests.command, 'node');
+  assert.ok(tests.args.includes('plugins/visual-explainer/task-proof/run-all-tests-strict.mjs'));
+  for (const check of policy.checks) assert.ok(['test', 'build'].includes(check.kind));
+});
+
+test('CI runs the strict test finder and a real MCP stdio handshake', () => {
+  const workflow = read('.github/workflows/task-proof.yml');
+  assert.match(workflow, /run-all-tests-strict\.mjs/);
+  assert.match(workflow, /mcp-handshake\.mjs/);
+  assert.match(workflow, /npm ci --ignore-scripts/);
+  assert.match(workflow, /ref:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
+  assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
+});
+
+test('CI records a distinct exact-head R2 release review after the matrix passes', () => {
+  const workflow = read('.github/workflows/task-proof.yml');
+  const reviewer = read('plugins/visual-explainer/task-proof/release-review-report.mjs');
+  assert.match(workflow, /independent-release-review:/);
+  assert.match(workflow, /needs: verify/);
+  assert.match(workflow, /TASK_PROOF_REVIEWED_SHA/);
+  assert.match(workflow, /release-review-report\.mjs/);
+  assert.match(reviewer, /procedureLevel:\s*['"]R2['"]/);
+  assert.match(reviewer, /verdict:\s*['"]PASS_WITH_LIMITS['"]/);
+  assert.match(reviewer, /git[\s\S]*rev-parse[\s\S]*HEAD/);
+});
+
+test('R2 report accepts the authorized post-review release decision', () => {
+  const headSha = execFileSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }).trim();
+  const output = execFileSync(process.execPath, [path.join(directory, 'release-review-report.mjs')], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TASK_PROOF_REVIEWED_SHA: headSha,
+      TASK_PROOF_REVIEWER_RUN_ID: 'integration-source-test',
+    },
+    windowsHide: true,
+  });
+  assert.equal(JSON.parse(output).verdict, 'PASS_WITH_LIMITS');
+});
+
+test('protocol documents state the core trust boundaries', () => {
+  const standard = read('plugins/visual-explainer/task-proof/STANDARD_V0.2.md');
+  const security = read('plugins/visual-explainer/task-proof/SECURITY_V0.2.md');
+  const mcp = read('plugins/visual-explainer/task-proof/MCP_V0.2.md');
+  assert.match(standard, /claimant output.*never|claimant.*no.*gate/is);
+  assert.match(standard, /working-tree.*content|dirty-file.*content/is);
+  assert.match(standard, /requiredEvidenceLocators/);
+  assert.match(security, /repository code/i);
+  assert.match(security, /residual risks/i);
+  assert.match(mcp, /task_proof_review/);
+  assert.match(mcp, /arbitrary command/i);
+});
+
+test('package declares the split MCP v2 server/client packages and exposes the dedicated binary', () => {
+  const packageJson = parse('package.json');
+  assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/server'], 'string');
+  assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/client'], 'string');
+  assert.equal(packageJson.dependencies?.['@modelcontextprotocol/sdk'], undefined);
+  assert.equal(packageJson.peerDependenciesMeta?.['@earendil-works/pi-coding-agent']?.optional, true);
+  assert.equal(packageJson.dependencies?.pptxgenjs, undefined);
+  assert.equal(packageJson.peerDependencies?.pptxgenjs, '^4.0.1');
+  assert.equal(packageJson.peerDependenciesMeta?.pptxgenjs?.optional, true);
+  const pptxExporter = read('plugins/visual-explainer/pptx/export.mjs');
+  assert.doesNotMatch(pptxExporter, /^import .* from ['"]pptxgenjs['"];?$/m);
+  assert.match(pptxExporter, /await import\(['"]pptxgenjs['"]\)/);
+  assert.match(pptxExporter, /optional PPTX dependency/i);
+  assert.equal(
+    packageJson.bin?.['visual-explainer-task-proof-mcp'],
+    './plugins/visual-explainer/task-proof/mcp-server.mjs',
+  );
+  assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('release path verifies the locked package artifact before creating a GitHub prerelease', () => {
+  const packageJson = parse('package.json');
+  const packageLock = parse('package-lock.json');
+  const releaseWorkflow = read('.github/workflows/release.yml');
+  const releaseSmoke = read('plugins/visual-explainer/task-proof/release-package-smoke.mjs');
+  const readme = read('README.md');
+
+  assert.equal(packageLock.lockfileVersion, 3);
+  assert.equal(packageLock.packages?.['']?.version, packageJson.version);
+  assert.equal(
+    packageJson.scripts?.['test:release-package'],
+    'node plugins/visual-explainer/task-proof/release-package-smoke.mjs',
+  );
+  assert.equal(
+    packageJson.scripts?.['verify:release'],
+    'npm run verify:task-proof && npm run test:release-package',
+  );
+  assert.match(releaseSmoke, /npm pack/);
+  assert.match(releaseSmoke, /node_modules/);
+  assert.match(releaseSmoke, /packed-artifact/);
+  assert.match(releaseSmoke, /GITHUB_REF_TYPE === ['"]tag['"]/);
+  assert.match(releaseWorkflow, /tags:\s*\n\s*- ['"]v\*['"]/);
+  assert.match(releaseWorkflow, /npm ci --ignore-scripts/);
+  assert.match(releaseWorkflow, /npm run verify:release/);
+  assert.match(releaseWorkflow, /gh release create/);
+  assert.match(releaseWorkflow, /--prerelease/);
+  assert.match(readme, /dongfanghong656\/visual-explainer\/releases\/download/);
+});

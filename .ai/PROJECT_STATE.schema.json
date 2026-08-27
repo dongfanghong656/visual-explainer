@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dongfanghong656/visual-explainer/project-state/1.0.0/schema.json",
+  "title": "Task Proof Visualizer project state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "projectName",
+    "repository",
+    "authorityPaths",
+    "phase",
+    "milestone",
+    "sync",
+    "counters",
+    "active",
+    "gates",
+    "blockers",
+    "nextAction"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "projectId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "projectName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "name",
+        "defaultBranch",
+        "managedBranch"
+      ],
+      "properties": {
+        "owner": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "defaultBranch": {
+          "type": "string"
+        },
+        "managedBranch": {
+          "type": "string"
+        }
+      }
+    },
+    "authorityPaths": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "phase": {
+      "type": "string"
+    },
+    "milestone": {
+      "type": "string"
+    },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "baseRevision",
+        "lastSyncedCommit",
+        "latestTurn",
+        "latestCheckpoint",
+        "pendingSelfReference"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "SYNCED",
+            "SYNC_BLOCKED",
+            "SYNC_PARTIAL",
+            "SYNC_CONFLICT"
+          ]
+        },
+        "baseRevision": {
+          "type": "string"
+        },
+        "lastSyncedCommit": {
+          "type": "string"
+        },
+        "latestTurn": {
+          "type": "string"
+        },
+        "latestCheckpoint": {
+          "type": "string"
+        },
+        "pendingSelfReference": {
+          "type": "boolean"
+        }
+      }
+    },
+    "counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "spec",
+        "task",
+        "artifact",
+        "evidence",
+        "decision",
+        "risk",
+        "checkpoint",
+        "turn",
+        "release"
+      ],
+      "properties": {
+        "requirement": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "spec": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "task": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "artifact": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "evidence": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "decision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "risk": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "checkpoint": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused numeric suffix for this stable-ID family."
+        },
+        "release": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Next unused REL-* numeric suffix."
+        }
+      }
+    },
+    "active": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirements",
+        "specs",
+        "tasks",
+        "artifacts",
+        "risks",
+        "releases"
+      ],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "specs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "releases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "developmentAcceptance",
+        "release"
+      ],
+      "properties": {
+        "developmentAcceptance": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "BLOCKED",
+            "NOT_ASSESSED"
+          ]
+        },
+        "release": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "BLOCKED",
+            "NOT_ASSESSED"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nextAction": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "kind": "stacked-draft-pr-status",
+  "pullRequest": 3,
+  "head": "stage/task-proof-visualizer/turn-0003-contract-authority",
+  "base": "chat/task-proof-visualizer/v0.1.0-recovery",
+  "title": "feat(task-proof): harden frozen contract authority protocol 2.4",
+  "protocol": "2.4.0",
+  "draft": true,
+  "remoteHead": "PENDING_SELF_REFERENCE",
+  "localFreshArchive": { "tests": 83, "passed": 83, "failed": 0, "skipped": 0 },
+  "node20": "POST_COMMIT_READBACK_REQUIRED",
+  "node22": "POST_COMMIT_READBACK_REQUIRED",
+  "copilotReview": "REQUESTED_NOT_ACCEPTANCE",
+  "independentR2R3Review": "NOT_ASSESSED",
+  "publicEntrypointEnforcement": "NOT_IMPLEMENTED",
+  "merge": "BLOCKED",
+  "release": "NOT_RELEASED",
+  "sync": "SYNCED_AFTER_POST_COMMIT_READBACK"
+}

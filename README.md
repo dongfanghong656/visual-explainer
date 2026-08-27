@@ -33,6 +33,7 @@ This skill fixes that. Real typography, dark/light themes, interactive Mermaid d
 | Claude Code | Marketplace plugin | Preserved marketplace shape with source at `plugins/visual-explainer/` |
 | Pi | Package metadata plus installer | `package.json` advertises the skill, prompts, and native `visual_explainer` tool with `prepare` and `render` actions; `install-pi.sh` installs copied skill/prompt resources for legacy manual installs |
 | MCP hosts | Local stdio MCP server | `visual-explainer-mcp` exposes render tools, prompt templates, and read-only skill resources without starting an HTTP server |
+| Task Proof MCP | Contract-enforced local stdio MCP | `visual-explainer-task-proof-mcp` exposes the eight-tool claimant/reviewer workflow; named-check execution remains opt-in |
 | PPTX export | Best-effort static utility | `visual-explainer-pptx` converts simple HTML slide decks to `.pptx`; HTML remains the source of truth |
 | Antigravity CLI | Native Agent Skills path | Copy `plugins/visual-explainer/` to `~/.gemini/antigravity-cli/skills/visual-explainer` for global use or `.agents/skills/visual-explainer` for one workspace |
 | Codex CLI | Native skill path plus optional prompts | Copy to `~/.codex/skills/visual-explainer`; optional prompts go in `~/.codex/prompts/` if your Codex build supports them |
@@ -89,6 +90,12 @@ curl -fsSL https://raw.githubusercontent.com/nicobailon/visual-explainer/main/in
 
 **MCP:**
 
+The Task Proof fork is distributed as a GitHub prerelease because the unscoped npm package name belongs to the upstream project. Install the immutable release artifact globally:
+
+```bash
+npm install --global --ignore-scripts --omit=peer https://github.com/dongfanghong656/visual-explainer/releases/download/v0.11.0-alpha.1/visual-explainer-0.11.0-alpha.1.tgz
+```
+
 Use `visual-explainer-mcp` from a package install, or run `npm install --no-package-lock` before pointing your host at `plugins/visual-explainer/mcp/server.mjs` from a checkout. Some hosts need an absolute path to the binary. The MCP server is local stdio only. It does not call an LLM, start an HTTP listener, handle credentials, or write outside `~/.agent/diagrams/`.
 
 Example package configuration:
@@ -118,6 +125,18 @@ Example checkout configuration:
 
 The server exposes three tools: `visual_explainer_prepare`, `visual_explainer_render_html`, and `visual_explainer_render_quick`. Render tools default to `open: false`; set `open: true` only when you want the server to request a browser or Glimpse window. It also exposes the bundled command templates as MCP prompts and the canonical `SKILL.md`, command markdown, quick README, and quick schema as read-only resources.
 
+For Task Proof, use the separate `visual-explainer-task-proof-mcp` package binary or point the host at `plugins/visual-explainer/task-proof/mcp-server.mjs`. It is local stdio only and exposes the frozen-contract claimant/reviewer tools. Named checks are disabled unless the operator starts that server with `TASK_PROOF_ALLOW_EXECUTION=1` after reviewing `.task-proof/checks.json`.
+
+```json
+{
+  "mcpServers": {
+    "visual-explainer-task-proof": {
+      "command": "visual-explainer-task-proof-mcp"
+    }
+  }
+}
+```
+
 **Antigravity CLI:**
 
 Antigravity CLI is the supported Google successor path for consumer Gemini CLI workflows. It loads Agent Skills from `.agents/skills/` at the workspace level or `~/.gemini/antigravity-cli/skills/` globally.
@@ -146,7 +165,7 @@ Launch `agy` in the project and use `/skills` to confirm `visual-explainer` is d
 
 **Codex CLI:**
 ```bash
-git clone --depth 1 https://github.com/nicobailon/visual-explainer.git /tmp/visual-explainer
+git clone --branch v0.11.0-alpha.1 --depth 1 https://github.com/dongfanghong656/visual-explainer.git /tmp/visual-explainer
 
 mkdir -p ~/.codex/skills ~/.codex/prompts
 cp -R /tmp/visual-explainer/plugins/visual-explainer ~/.codex/skills/visual-explainer
@@ -158,6 +177,13 @@ rm -rf /tmp/visual-explainer
 ```
 
 Invoke with `$visual-explainer` or ask Codex to use the `visual-explainer` skill. If prompts are installed and supported, use `/prompts:diff-review`, `/prompts:plan-review`, etc.
+
+Register the installed Task Proof MCP server with Codex and confirm that it is enabled:
+
+```bash
+codex mcp add visual-explainer-task-proof -- visual-explainer-task-proof-mcp
+codex mcp list
+```
 
 **OpenCode/opencode:**
 ```bash

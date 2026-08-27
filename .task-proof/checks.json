@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "checks": [
+    {
+      "id": "task-proof-tests",
+      "kind": "test",
+      "command": "node",
+      "args": [
+        "plugins/visual-explainer/task-proof/run-all-tests-strict.mjs"
+      ],
+      "cwd": ".",
+      "timeoutMs": 300000,
+      "maxOutputBytes": 2097152
+    },
+    {
+      "id": "task-proof-mcp-contract",
+      "kind": "test",
+      "command": "node",
+      "args": [
+        "plugins/visual-explainer/task-proof/mcp-contract.mjs"
+      ],
+      "cwd": ".",
+      "timeoutMs": 60000,
+      "maxOutputBytes": 1048576
+    }
+  ]
+}
