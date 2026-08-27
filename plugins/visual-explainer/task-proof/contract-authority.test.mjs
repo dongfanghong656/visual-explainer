@@ -291,7 +291,7 @@ test('every source and requirement-to-criterion edge must be represented symmetr
   unused.sources.push({ ...unused.sources[0], sourceId: 'SRC-UNUSED', locator: 'docs/unused.md' });
   assert.throws(() => normalizeTaskContract(unused), /not represented by requirements/);
   assert.throws(() => normalizeTaskContract(contract({ requirements: [{ ...contract().requirements[0], criterionIds: [] }] })), /must contain 1-256 items/);
-  assert.throws(() => normalizeTaskContract(contract({ criteria: [{ ...contract().criteria[0], sourceRequirementRefs: ['REQ-OTHER'] }] })), /unknown requirement/);
+  assert.throws(() => normalizeTaskContract(contract({ criteria: [{ ...contract().criteria[0], sourceRequirementRefs: ['REQ-0007-A', 'REQ-OTHER'] }] })), /unknown requirement/);
 });
 
 test('non-covered requirements cannot retain hidden criterion links', () => {
@@ -312,7 +312,7 @@ test('claim binding detects criterion omission, weakening, repository drift, and
   assert.equal(validateClaimContractBinding(value, claim).ok, true);
   assert.equal(validateClaimContractBinding(value, claimFor(value, { contractCriterionSnapshot: [] })).ok, false);
   const weakened = structuredClone(claim);
-  weakened.contractCriterionSnapshot[0].requiredEvidenceLocators = [];
+  weakened.contractCriterionSnapshot[0].requiredEvidenceLocators = ['named-check:other-check'];
   assert.equal(validateClaimContractBinding(value, weakened).ok, false);
   assert.ok(validateClaimContractBinding(value, claimFor(value, { repository: { headSha: '3'.repeat(40) } })).ok);
   assert.ok(validateClaimContractBinding(value, claimFor(value, { generatedAt: '2026-08-26T23:59:59.000Z' })).errors.includes('CLAIM_PREDATES_CONTRACT'));

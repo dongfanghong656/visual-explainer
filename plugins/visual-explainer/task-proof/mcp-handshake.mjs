@@ -6,12 +6,18 @@ import { fileURLToPath } from 'node:url';
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(directory, '..', '..', '..');
 const serverPath = path.join(directory, 'mcp-server.mjs');
+const deployedBinary = process.env.TASK_PROOF_MCP_DEPLOYED === '1';
+const deployedThroughCmd = deployedBinary && process.platform === 'win32';
 const inheritedEnvironment = Object.fromEntries(
   Object.entries(process.env).filter((entry) => typeof entry[1] === 'string'),
 );
 const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [serverPath],
+  command: deployedThroughCmd
+    ? (process.env.ComSpec ?? 'cmd.exe')
+    : deployedBinary ? 'visual-explainer-task-proof-mcp' : process.execPath,
+  args: deployedThroughCmd
+    ? ['/d', '/s', '/c', 'visual-explainer-task-proof-mcp']
+    : deployedBinary ? [] : [serverPath],
   cwd: repositoryRoot,
   env: {
     ...inheritedEnvironment,
@@ -51,7 +57,12 @@ try {
   if (!payload.snapshot?.snapshotDigest || !payload.snapshot?.repository?.headSha) {
     throw new Error('Snapshot tool response is missing its digest or head SHA.');
   }
-  console.log(JSON.stringify({ ok: true, tools: names, snapshotDigest: payload.snapshot.snapshotDigest }, null, 2));
+  console.log(JSON.stringify({
+    ok: true,
+    server: deployedBinary ? 'linked-package-binary' : 'checkout-module',
+    tools: names,
+    snapshotDigest: payload.snapshot.snapshotDigest,
+  }, null, 2));
 } finally {
   await client.close();
 }

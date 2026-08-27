@@ -6,6 +6,7 @@ export {
 } from './contract-public-claim.mjs';
 export {
   contractGateBasisFromFinalReview,
+  describePublicTrustedAdapters,
   finalizePublicContractReview,
   validateFinalPublicContractReview,
 } from './contract-public-review.mjs';

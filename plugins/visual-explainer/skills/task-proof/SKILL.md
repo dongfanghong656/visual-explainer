@@ -26,13 +26,15 @@ Use this skill automatically before making a material completion statement about
 
 Use claimant mode when this run implemented or edited the work.
 
-1. Recover requirements, specification, acceptance criteria, decisions, risks, checkpoint, and release boundary.
-2. Call `task_proof_snapshot`.
+1. Recover requirements, specification, acceptance criteria, decisions, risks, checkpoint, release boundary, and the project-approved frozen Task Contract.
+2. Call `task_proof_validate_contract`, then `task_proof_snapshot` at the contract base revision.
 3. Build a causal model: old failure → root cause → changed mechanism → new behavior; include state ownership, lifecycle, asynchronous boundaries, invariants, termination, regressions, and degradation.
 4. Create claims with statuses `declared_done`, `partial`, `blocked`, or `not_done`.
 5. Bind every declared-done claim to acceptance criteria and claimant evidence.
-6. Call `task_proof_claim`.
+6. Call `task_proof_claim` with the validated contract and complete criterion snapshot.
 7. Report `CLAIM_STATUS: UNVERIFIED` and request a different run to execute reviewer mode.
+
+If project authority has not approved a frozen contract, label the claimant-created substitute **PROVISIONAL CONTRACT**. It cannot produce an authoritative result above `INCONCLUSIVE`.
 
 Follow `../../commands/task-proof.md` and `../../task-proof/STANDARD_V0.2.md`.
 
@@ -41,12 +43,13 @@ Follow `../../commands/task-proof.md` and `../../task-proof/STANDARD_V0.2.md`.
 Use reviewer mode only when this run is not continuing the claimant's implementation.
 
 1. Use a reviewer run ID different from the claimant run ID.
-2. Reconstruct the contract independently rather than trusting the claim narrative.
+2. Reconstruct and validate the contract independently with `task_proof_validate_contract` rather than trusting the claim narrative.
 3. Call `task_proof_snapshot` and reject stale state.
-4. Collect fresh evidence with `task_proof_probe` and, after operator opt-in, `task_proof_run_checks`.
-5. Bind each receipt to the exact claim IDs and acceptance-criterion IDs it supports.
-6. Submit one finding per claim to `task_proof_review`.
-7. Report the computed `PASS`, `PASS_WITH_LIMITS`, `FAIL`, or `INCONCLUSIVE` gate and its exact snapshot and artifact digests.
+4. Issue one reviewer-owned `task_proof_contract_source_receipt` for every declared repository authority source.
+5. Collect fresh evidence with `task_proof_probe` and, after operator opt-in, `task_proof_run_checks`.
+6. Bind each receipt to the exact claim IDs and acceptance-criterion IDs it supports.
+7. Submit one finding per claim to `task_proof_review` with the contract, reviewer attestation, and authority receipts.
+8. Report the authoritative `contractGate` (`PASS`, `PASS_WITH_LIMITS`, `FAIL`, or `INCONCLUSIVE`) and its exact contract, Claim, Review, snapshot, and artifact digests.
 
 Follow `../../commands/task-proof-review.md`, `../../task-proof/SECURITY_V0.2.md`, and `../../task-proof/MCP_V0.2.md`.
 

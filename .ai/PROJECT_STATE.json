@@ -6,7 +6,7 @@
     "owner": "dongfanghong656",
     "name": "visual-explainer",
     "defaultBranch": "main",
-    "managedBranch": "stage/task-proof-visualizer/turn-0003-contract-authority"
+    "managedBranch": "stage/task-proof-visualizer/turn-0004-public-enforcement"
   },
   "authorityPaths": {
     "agentContract": "PROJECT_AGENT.md",
@@ -22,43 +22,44 @@
     "evidenceAndAcceptance": "docs/TEST_AND_ACCEPTANCE.md",
     "release": "docs/RELEASE_STATUS.md",
     "handoff": "docs/HANDOFF.md",
-    "contractAuthority": "docs/task-proof/TURN-0003_CONTRACT_AUTHORITY_STATUS.md"
+    "contractAuthority": "docs/task-proof/TURN-0003_CONTRACT_AUTHORITY_STATUS.md",
+    "publicEnforcement": "docs/task-proof/TURN-0004_PUBLIC_ENFORCEMENT_STATUS.md"
   },
-  "phase": "ALPHA_CONTRACT_AUTHORITY_VERIFIED_STAGING",
-  "milestone": "Task Contract Protocol 2.4 verified staging candidate",
+  "phase": "ALPHA_PUBLIC_CONTRACT_ENFORCEMENT_STAGING",
+  "milestone": "Public Enforcement 1.0 with trusted server adapters and default-deny MCP registration",
   "sync": {
-    "status": "SYNCED",
-    "baseRevision": "f2c0ced20615ffea3c92ddda7bd329dfc056832f",
+    "status": "LOCAL_VERIFIED_PENDING_COMMIT_AND_REMOTE_CI",
+    "baseRevision": "598006bc322cb7cb220085c63f46a71a263f4636",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
-    "latestTurn": "TURN-0003",
-    "latestCheckpoint": "CHK-0003",
+    "latestTurn": "TURN-0004",
+    "latestCheckpoint": "CHK-0004",
     "pendingSelfReference": true
   },
   "counters": {
     "requirement": 8,
-    "spec": 4,
+    "spec": 5,
     "task": 8,
-    "artifact": 7,
-    "evidence": 9,
-    "decision": 8,
+    "artifact": 8,
+    "evidence": 12,
+    "decision": 9,
     "risk": 11,
-    "checkpoint": 4,
-    "turn": 4,
+    "checkpoint": 5,
+    "turn": 5,
     "release": 2
   },
   "active": {
     "requirements": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0007"],
-    "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003"],
+    "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003", "SPEC-0004"],
     "tasks": ["TASK-0005", "TASK-0007"],
-    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006"],
-    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0006", "RSK-0007"],
+    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006", "ART-0007"],
+    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0006", "RSK-0007", "RSK-0010"],
     "releases": ["REL-0001"]
   },
   "gates": {
-    "developmentAcceptance": "BLOCKED",
+    "developmentAcceptance": "PENDING_REMOTE_CI_AND_INDEPENDENT_REVIEW",
     "release": "BLOCKED",
-    "reason": "The isolated Task Contract 2.4 core is tested, but public-entrypoint enforcement, trusted external adapters, and independent R2/R3 review remain incomplete."
+    "reason": "The integrated public path passes local tests and linked deployment, but exact final-head Node 20/22 CI and a distinct R2/R3 review remain incomplete."
   },
-  "blockers": ["RSK-0005", "RSK-0006", "RSK-0007"],
-  "nextAction": "After exact final-head Node 20/22 readback, create a new staging branch for TASK-0007 public-entrypoint enforcement."
+  "blockers": ["RSK-0005", "RSK-0007", "RSK-0010", "INDEPENDENT_R2_R3_REVIEW"],
+  "nextAction": "Push the reviewed TURN-0004 commit, require Node 20/22 success for that exact PR #4 HEAD, then run a distinct R2/R3 review without merging or publishing."
 }

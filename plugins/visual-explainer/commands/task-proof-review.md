@@ -15,9 +15,11 @@ A different run ID is a protocol separation marker, not cryptographic identity. 
 
 ## 2. Reconstruct the contract independently
 
-Read the original requirement, specification, acceptance criteria, implementation, tests, decisions, risks, and release boundary. Treat the claim only as propositions to test. Check the old failure chain, changed control/data flow, state ownership, lifecycle, concurrency and cancellation paths, errors and degradation, invariants, termination, regressions, and compatibility.
+Read the original requirement, specification, acceptance criteria, implementation, tests, decisions, risks, and release boundary. Call `task_proof_validate_contract` on the supplied contract and compare its digest, authority declaration, repository, base revision, and complete criterion snapshot with the Claim. Treat the claim only as propositions to test. Check the old failure chain, changed control/data flow, state ownership, lifecycle, concurrency and cancellation paths, errors and degradation, invariants, termination, regressions, and compatibility.
 
 ## 3. Reproduce criterion-level evidence
+
+For every declared repository authority source, call `task_proof_contract_source_receipt` yourself with the exact contract, Claim, reviewer run ID, and source ID. A missing, stale, claimant-owned, or context-mismatched authority receipt prevents an authoritative pass.
 
 Use `task_proof_probe` for allowlisted read-only observations:
 
@@ -33,13 +35,13 @@ For behavioral checks, use repository-defined named checks from `.task-proof/che
 
 Issue one finding per claim: `verified`, `partially_verified`, `unsupported`, `contradicted`, `stale`, or `not_applicable`. Cite only evidence IDs collected during this review. A requested `verified` finding is downgraded unless every referenced acceptance criterion is covered by a valid MCP receipt of an allowed evidence kind.
 
-Call `task_proof_review` with the claim, reviewer identity, findings, probes, and named-check requests. The tool collects evidence at one snapshot, detects repository races, binds receipt and artifact digests, computes the gate, and renders review JSON/SVG/HTML/manifest.
+Call `task_proof_review` with the contract, Claim, reviewer identity and attestation, reviewer-owned authority receipts, findings, probes, and named-check requests. The tool collects evidence at one snapshot, detects repository races, binds receipt and artifact digests, computes the legacy evidence gate and the authoritative `contractGate`, and renders review JSON/SVG/HTML/manifest.
 
-- `PASS`: every `declared_done` claim is independently verified at the pinned snapshot.
-- `PASS_WITH_LIMITS`: no declared-done claim fails, but at least one is only partially verified.
-- `FAIL`: any declared-done claim is unsupported or contradicted.
-- `INCONCLUSIVE`: evidence is stale or incomparable, or there is no declared-done claim.
+- `PASS`: `contractGate` confirms every blocking contract criterion and trusted adapter result at the pinned snapshot.
+- `PASS_WITH_LIMITS`: `contractGate` confirms the allowed subset but preserves an explicit contract/source limitation.
+- `FAIL`: `contractGate` detects a contradiction, mismatch, invalid receipt, or failed blocking condition.
+- `INCONCLUSIVE`: authority, trusted adapters, evidence, lifecycle, or coverage is missing or provisional.
 
 ## 5. Report the boundary
 
-Report the gate, claim/review/snapshot digests, verdict groups, checks actually rerun, dirty state, unresolved risks, evidence needed to change the verdict, and output paths. Never infer merged, released, deployed, externally accepted, or production-ready from implementation tests.
+Report `contractGate` as the authoritative task result, plus the legacy evidence gate, contract/claim/review/snapshot digests, authority receipt set, reviewer level, verdict groups, checks actually rerun, dirty state, unresolved risks, evidence needed to change the verdict, and output paths. Never infer merged, released, deployed, externally accepted, or production-ready from implementation tests.

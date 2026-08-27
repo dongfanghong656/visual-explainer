@@ -19,6 +19,8 @@ A public completion result may be called authoritative for the task only when al
 5. the repository remains at the same complete snapshot before and after evidence collection;
 6. evidence and lifecycle assessments are generated and revalidated by trusted public adapters;
 7. `computeStrictContractGate` is called by the public review path.
+8. every verifier is resolved from the server-owned trusted-adapter registry; client input cannot supply an adapter factory or adapter ID;
+9. every public `task_proof_*` MCP tool is explicitly classified before registration, and an unclassified future tool prevents server startup.
 
 Claimant output remains `UNVERIFIED`. The legacy criterion-level gate is retained as `review.gate` for compatibility and evidence accounting. The only authoritative task-acceptance result is `review.contractGate.gate` and the MCP's top-level `gate` response.
 
@@ -37,6 +39,19 @@ independent reviewer
 ```
 
 The built-in authority adapter supports only `repository_file` sources verified by `repository_source`. User-message, GitHub Issue, release-registry, and cryptographic authority types require separately trusted adapters; without one, the result remains `INCONCLUSIVE` or fails closed.
+
+## Trusted server adapters
+
+The public finalizer resolves exactly four current adapters from an immutable in-process registry:
+
+- `authority:repository-source-v1`;
+- `evidence:strict-review-evidence-v1`;
+- `named-check:repository-named-check-v1`;
+- `lifecycle:repository-snapshot-lifecycle-v1`.
+
+The registry stores function factories, not JSON configuration. Missing identities fail with `TRUSTED_ADAPTER_UNAVAILABLE`; arbitrary client-provided adapters are not part of the MCP schema. The review response reports the non-secret adapter manifest used for the gate.
+
+The dedicated MCP also maintains an explicit classification for all eight current tools. Adding a new tool definition without adding its reviewed classification fails with `UNCLASSIFIED_TASK_PROOF_TOOL` before registration.
 
 ## Artifact and diagram rules
 

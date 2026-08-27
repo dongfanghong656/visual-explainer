@@ -8,6 +8,7 @@ This directory contains the evidence-gated Task Proof runtime used by the Visual
 - `SECURITY_V0.2.md` — repository, execution, output, and receipt boundaries;
 - `MCP_V0.2.md` — current eight-tool, contract-enforced MCP surface;
 - `CONTRACT_AUTHORITY_V2.4.md` — frozen Task Contract authority and final-gate rules;
+- `PUBLIC_CONTRACT_ENFORCEMENT_V1.md` — mandatory public contract path, trusted adapters, and default-deny tool registration;
 - `task-proof.schema.json` — Claim/Review migration shape;
 - `task-contract.schema.json` — strict Task Contract shape.
 
@@ -21,6 +22,7 @@ Historical `PROTOCOL.md`, `CONTRACT_AUTHORITY_V2.1.md`, and `CONTRACT_AUTHORITY_
 - `contract-final-gate.test.mjs` — orchestration and context-binding attacks;
 - `contract-authority-static.test.mjs` — schema/example/specification drift checks;
 - `contract-public-enforcement.mjs` — public Claim/Review binding, repository-source authority adapter, trusted assessments, and named-check adaptation;
+- `trusted-adapter-registry.mjs` — immutable server-owned adapter factories with fail-closed lookup;
 - `PUBLIC_CONTRACT_ENFORCEMENT_V1.md` — mandatory public-entrypoint contract.
 
 Public or release-adjacent integrations must call `computeStrictContractGate` from `contract-final-gate.mjs`. The lower-level calculator in `contract-authority.mjs` is not a public authorization boundary.

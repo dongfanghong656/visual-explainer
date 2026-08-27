@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- Added a server-owned trusted-adapter registry for repository authority, strict-review evidence, repository named checks, and exact-snapshot lifecycle verification.
+- Added default-deny MCP registration so every public `task_proof_*` tool must have an explicit reviewed classification before server startup.
+
+### Fixed
+- Updated Protocol 2.4 adversarial fixtures and public Task Proof Skill/command instructions so the exact Node 20/22 CI path no longer fails on migrated criterion locators or the contract-mandatory workflow.
+
 ## [0.10.0] - 2026-08-20
 
 ### Highlights

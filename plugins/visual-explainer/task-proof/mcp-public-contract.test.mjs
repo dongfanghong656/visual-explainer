@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import {
   TOOL_DEFINITIONS,
   TOOL_INPUT_SCHEMAS,
+  TASK_PROOF_TOOL_CLASSIFICATIONS,
   handleTaskProofTool,
+  isDirectExecution,
+  validateTaskProofToolRegistry,
 } from './mcp-server.mjs';
 import { TASK_CONTRACT_VERSION } from './contract-authority.mjs';
 
@@ -25,6 +28,21 @@ test('public MCP exposes the eight-tool contract-enforced surface', () => {
     'task_proof_validate_claim',
     'task_proof_validate_contract',
   ]);
+});
+
+test('public MCP registration defaults to deny for unclassified Task Proof tools', () => {
+  assert.equal(validateTaskProofToolRegistry(TOOL_DEFINITIONS).length, 8);
+  assert.equal(TASK_PROOF_TOOL_CLASSIFICATIONS.task_proof_review, 'acceptance');
+  assert.throws(
+    () => validateTaskProofToolRegistry([...TOOL_DEFINITIONS, { name: 'task_proof_future_bypass' }]),
+    (error) => error.code === 'UNCLASSIFIED_TASK_PROOF_TOOL',
+  );
+});
+
+test('npm-linked entrypoints are recognized through their real filesystem target', () => {
+  const canonical = '/real/task-proof/mcp-server.mjs';
+  assert.equal(isDirectExecution('/linked/bin/mcp-server.mjs', import.meta.url, () => canonical), true);
+  assert.equal(isDirectExecution(null, import.meta.url, () => canonical), false);
 });
 
 test('public Claim and Review schemas fail closed without a frozen contract', () => {

@@ -12,6 +12,8 @@ The server uses the official split MCP v2 packages (`@modelcontextprotocol/serve
 node plugins/visual-explainer/task-proof/mcp-server.mjs
 ```
 
+All eight public tools are explicitly classified as observation, validation, claimant, reviewer-evidence, or acceptance operations. Server construction validates the complete set and refuses an unclassified future `task_proof_*` tool. Final Review verifiers are resolved only from the in-process trusted-adapter registry and cannot be supplied in request JSON.
+
 An installed package also exposes `visual-explainer-task-proof-mcp`. Enable repository-owned named checks only after reviewing `.task-proof/checks.json`:
 
 ```bash

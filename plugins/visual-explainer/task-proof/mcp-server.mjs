@@ -2,7 +2,8 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   PROTOCOL_VERSION,
   TaskProofError,
@@ -64,6 +65,43 @@ const FINDING_INPUT = z.object({
   rationale: z.string(),
   reviewEvidenceIds: UNIQUE_STRING_ARRAY,
 }).strict();
+
+export const TASK_PROOF_TOOL_CLASSIFICATIONS = Object.freeze({
+  task_proof_snapshot: 'observation',
+  task_proof_probe: 'reviewer-evidence',
+  task_proof_run_checks: 'reviewer-evidence',
+  task_proof_validate_contract: 'validation',
+  task_proof_contract_source_receipt: 'reviewer-evidence',
+  task_proof_validate_claim: 'validation',
+  task_proof_claim: 'claimant',
+  task_proof_review: 'acceptance',
+});
+
+const ALLOWED_TOOL_CLASSIFICATIONS = new Set([
+  'observation', 'reviewer-evidence', 'validation', 'claimant', 'acceptance',
+]);
+
+export function validateTaskProofToolRegistry(definitions, classifications = TASK_PROOF_TOOL_CLASSIFICATIONS) {
+  if (!Array.isArray(definitions)) throw new TaskProofError('INVALID_TOOL_REGISTRY', 'Task Proof tool definitions must be an array.');
+  const seen = new Set();
+  for (const definition of definitions) {
+    const name = definition?.name;
+    if (typeof name !== 'string' || !name.startsWith('task_proof_')
+      || !Object.prototype.hasOwnProperty.call(classifications, name)) {
+      throw new TaskProofError('UNCLASSIFIED_TASK_PROOF_TOOL', `Task Proof tool is not explicitly classified: ${String(name)}.`);
+    }
+    if (!ALLOWED_TOOL_CLASSIFICATIONS.has(classifications[name])) {
+      throw new TaskProofError('INVALID_TASK_PROOF_TOOL_CLASS', `Task Proof tool ${name} has an invalid classification.`);
+    }
+    if (seen.has(name)) throw new TaskProofError('DUPLICATE_TASK_PROOF_TOOL', `Duplicate Task Proof tool: ${name}.`);
+    seen.add(name);
+  }
+  const stale = Object.keys(classifications).filter((name) => !seen.has(name));
+  if (stale.length > 0) {
+    throw new TaskProofError('STALE_TASK_PROOF_TOOL_CLASSIFICATION', `Classified Task Proof tools are not registered: ${stale.join(', ')}.`);
+  }
+  return definitions;
+}
 
 const TOOL_SPECS = Object.freeze([
   {
@@ -161,6 +199,8 @@ export const TOOL_DEFINITIONS = Object.freeze(TOOL_SPECS.map((tool) => ({
   description: tool.description,
   inputSchema: z.toJSONSchema(tool.inputSchema),
 })));
+
+validateTaskProofToolRegistry(TOOL_DEFINITIONS);
 
 function asObject(value, name) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -322,6 +362,7 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       return {
         gate: finalized.gate,
         legacyGate: review.gate,
+        trustedAdapters: finalized.trustedAdapters,
         review,
         files,
         rule: 'contractGate is authoritative for task acceptance. legacyGate is retained only as the criterion-level evidence assessment and never authorizes merge, release, publication, deployment, hardware acceptance, user acceptance, or real-world effectiveness.',
@@ -347,7 +388,7 @@ export function createTaskProofServer() {
     },
   );
 
-  for (const definition of TOOL_DEFINITIONS) {
+  for (const definition of validateTaskProofToolRegistry(TOOL_DEFINITIONS)) {
     const inputSchema = TOOL_INPUT_SCHEMAS[definition.name];
     if (!inputSchema) throw new Error(`Missing runtime input schema for ${definition.name}.`);
     server.registerTool(
@@ -383,7 +424,16 @@ export function main() {
   return handle;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function isDirectExecution(argvPath = process.argv[1], moduleUrl = import.meta.url, resolveRealPath = realpathSync) {
+  if (!argvPath) return false;
+  try {
+    return resolveRealPath(argvPath) === resolveRealPath(fileURLToPath(moduleUrl));
+  } catch {
+    return moduleUrl === pathToFileURL(argvPath).href;
+  }
+}
+
+if (isDirectExecution()) {
   try {
     main();
   } catch (error) {

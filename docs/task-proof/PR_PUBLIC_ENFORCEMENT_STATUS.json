@@ -1,0 +1,21 @@
+{
+  "kind": "stacked-draft-pr-status",
+  "pullRequest": 4,
+  "head": "stage/task-proof-visualizer/turn-0004-public-enforcement",
+  "base": "stage/task-proof-visualizer/turn-0003-contract-authority",
+  "title": "feat(task-proof): enforce frozen contracts on public entrypoints",
+  "contractProtocol": "2.4.0",
+  "publicEnforcement": "1.0.0",
+  "draft": true,
+  "remoteHead": "PENDING_SELF_REFERENCE",
+  "localStrictTests": { "tests": 104, "passed": 100, "failed": 0, "skipped": 4 },
+  "checkoutStdioHandshake": "PASS",
+  "linkedBinaryStdioHandshake": "PASS",
+  "packageDryRunEntries": 94,
+  "node20": "POST_COMMIT_READBACK_REQUIRED",
+  "node22": "POST_COMMIT_READBACK_REQUIRED",
+  "independentR2R3Review": "NOT_ASSESSED",
+  "merge": "BLOCKED",
+  "release": "NOT_RELEASED",
+  "sync": "LOCAL_VERIFIED_PENDING_COMMIT_AND_REMOTE_CI"
+}

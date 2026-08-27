@@ -284,6 +284,12 @@ test('complete public Review produces PASS only through the strict contract orch
     assert.equal(result.review.legacyGate.status, 'PASS');
     assert.equal(result.review.contractGate.gate, 'PASS');
     assert.equal(result.review.contractGateBasisDigest.startsWith('sha256:'), true);
+    assert.deepEqual(result.trustedAdapters.map(({ kind, id }) => `${kind}:${id}`), [
+      'authority:repository-source-v1',
+      'evidence:strict-review-evidence-v1',
+      'lifecycle:repository-snapshot-lifecycle-v1',
+      'named-check:repository-named-check-v1',
+    ]);
     const finalValidation = validateFinalPublicContractReview({ contract: value.contract, claim: value.bound.claim, review: result.review });
     assert.equal(finalValidation.ok, true);
     result.review.artifactDigest = artifactDigest(result.review);

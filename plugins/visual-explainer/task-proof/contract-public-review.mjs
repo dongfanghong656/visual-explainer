@@ -14,6 +14,7 @@ import {
 import { computeStrictContractGate } from './contract-final-gate.mjs';
 import { createRepositorySnapshotStrict as createRepositorySnapshot } from './snapshot.mjs';
 import { createPublicRepositoryAuthorityAdapter } from './contract-repository-source-adapter.mjs';
+import { createTrustedAdapterRegistry } from './trusted-adapter-registry.mjs';
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -183,6 +184,37 @@ function namedCheckVerifier({ contract, claim, review, sourceEvidence }) {
   };
 }
 
+const PUBLIC_TRUSTED_ADAPTER_REGISTRY = createTrustedAdapterRegistry([
+  {
+    kind: 'authority',
+    id: 'repository-source-v1',
+    description: 'Reopens repository contract sources at immutable revisions.',
+    create: ({ repositoryPath }) => createPublicRepositoryAuthorityAdapter(repositoryPath),
+  },
+  {
+    kind: 'evidence',
+    id: 'strict-review-evidence-v1',
+    description: 'Revalidates the strict legacy review evidence and findings digests.',
+    create: ({ contract, claim, review }) => evidenceVerifier(contract, claim, review),
+  },
+  {
+    kind: 'lifecycle',
+    id: 'repository-snapshot-lifecycle-v1',
+    description: 'Recollects the exact repository snapshot before accepting lifecycle state.',
+    create: (context) => lifecycleVerifier(context),
+  },
+  {
+    kind: 'named-check',
+    id: 'repository-named-check-v1',
+    description: 'Revalidates repository-owned named-check receipts against review evidence.',
+    create: (context) => namedCheckVerifier(context),
+  },
+]);
+
+export function describePublicTrustedAdapters() {
+  return PUBLIC_TRUSTED_ADAPTER_REGISTRY.describe();
+}
+
 export function contractGateBasisFromFinalReview(finalReview) {
   const basis = cloneJson(finalReview);
   delete basis.legacyGate;
@@ -237,18 +269,26 @@ export function finalizePublicContractReview({
   const named = adaptNamedCheckReceipts(normalized, claim, basis);
   const evidence = evidenceAssessment(normalized, claim, basis);
   const lifecycle = lifecycleAssessment(normalized, claim, basis, snapshot);
+  const adapterContext = {
+    repositoryPath,
+    contract: normalized,
+    claim,
+    review: basis,
+    sourceEvidence: named.sourceEvidence,
+    basisSnapshot: snapshot,
+  };
   const strict = computeStrictContractGate({
     contract: normalized,
     claim,
     review: basis,
     authorityReceipts: receipts,
-    authorityAdapter: createPublicRepositoryAuthorityAdapter(repositoryPath),
+    authorityAdapter: PUBLIC_TRUSTED_ADAPTER_REGISTRY.require('authority', 'repository-source-v1', adapterContext),
     evidenceAssessment: evidence,
-    evidenceVerifier: evidenceVerifier(normalized, claim, basis),
+    evidenceVerifier: PUBLIC_TRUSTED_ADAPTER_REGISTRY.require('evidence', 'strict-review-evidence-v1', adapterContext),
     namedCheckReceipts: named.receipts,
-    namedCheckVerifier: namedCheckVerifier({ contract: normalized, claim, review: basis, sourceEvidence: named.sourceEvidence }),
+    namedCheckVerifier: PUBLIC_TRUSTED_ADAPTER_REGISTRY.require('named-check', 'repository-named-check-v1', adapterContext),
     lifecycleAssessment: lifecycle,
-    lifecycleVerifier: lifecycleVerifier({ repositoryPath, contract: normalized, claim, review: basis, basisSnapshot: snapshot }),
+    lifecycleVerifier: PUBLIC_TRUSTED_ADAPTER_REGISTRY.require('lifecycle', 'repository-snapshot-lifecycle-v1', adapterContext),
   });
   const legacyGate = cloneJson(basis.gate);
   const finalReview = {
@@ -268,6 +308,7 @@ export function finalizePublicContractReview({
     evidenceAssessment: evidence,
     namedCheckReceipts: named.receipts,
     lifecycleAssessment: lifecycle,
+    trustedAdapters: PUBLIC_TRUSTED_ADAPTER_REGISTRY.describe(),
   };
 }
 

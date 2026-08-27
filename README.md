@@ -33,6 +33,7 @@ This skill fixes that. Real typography, dark/light themes, interactive Mermaid d
 | Claude Code | Marketplace plugin | Preserved marketplace shape with source at `plugins/visual-explainer/` |
 | Pi | Package metadata plus installer | `package.json` advertises the skill, prompts, and native `visual_explainer` tool with `prepare` and `render` actions; `install-pi.sh` installs copied skill/prompt resources for legacy manual installs |
 | MCP hosts | Local stdio MCP server | `visual-explainer-mcp` exposes render tools, prompt templates, and read-only skill resources without starting an HTTP server |
+| Task Proof MCP | Contract-enforced local stdio MCP | `visual-explainer-task-proof-mcp` exposes the eight-tool claimant/reviewer workflow; named-check execution remains opt-in |
 | PPTX export | Best-effort static utility | `visual-explainer-pptx` converts simple HTML slide decks to `.pptx`; HTML remains the source of truth |
 | Antigravity CLI | Native Agent Skills path | Copy `plugins/visual-explainer/` to `~/.gemini/antigravity-cli/skills/visual-explainer` for global use or `.agents/skills/visual-explainer` for one workspace |
 | Codex CLI | Native skill path plus optional prompts | Copy to `~/.codex/skills/visual-explainer`; optional prompts go in `~/.codex/prompts/` if your Codex build supports them |
@@ -117,6 +118,18 @@ Example checkout configuration:
 ```
 
 The server exposes three tools: `visual_explainer_prepare`, `visual_explainer_render_html`, and `visual_explainer_render_quick`. Render tools default to `open: false`; set `open: true` only when you want the server to request a browser or Glimpse window. It also exposes the bundled command templates as MCP prompts and the canonical `SKILL.md`, command markdown, quick README, and quick schema as read-only resources.
+
+For Task Proof, use the separate `visual-explainer-task-proof-mcp` package binary or point the host at `plugins/visual-explainer/task-proof/mcp-server.mjs`. It is local stdio only and exposes the frozen-contract claimant/reviewer tools. Named checks are disabled unless the operator starts that server with `TASK_PROOF_ALLOW_EXECUTION=1` after reviewing `.task-proof/checks.json`.
+
+```json
+{
+  "mcpServers": {
+    "visual-explainer-task-proof": {
+      "command": "visual-explainer-task-proof-mcp"
+    }
+  }
+}
+```
 
 **Antigravity CLI:**
 

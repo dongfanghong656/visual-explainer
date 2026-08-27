@@ -41,3 +41,10 @@
 - Date: 2026-08-27
 - Decision: authority, evidence, named-check, and lifecycle results must be revalidated through trusted adapters/verifiers. Caller-supplied `PASS` strings, assurance labels, or reviewer-level assertions are not authority.
 - Consequence: missing verifiers are INCONCLUSIVE; digest, identity, chronology, policy, source, or explicit trusted-verifier rejection is FAIL.
+
+## DEC-0008 — Public adapters and tools are explicit server capabilities
+
+- Status: ACCEPTED
+- Date: 2026-08-27
+- Decision: public final-gate adapters are in-process function factories in one immutable registry, and every public `task_proof_*` MCP tool must have an explicit reviewed classification before registration.
+- Consequence: request JSON cannot inject verifier functions or adapter identities; missing adapters and unclassified future tools fail closed.

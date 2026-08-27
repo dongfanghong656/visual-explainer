@@ -11,7 +11,10 @@
 | EVD-0005 | Targeted secret/package-content scans | PASS_AT_PRIOR_BASELINE | Local scans/package dry-run | Not a platform-wide audit |
 | EVD-0006 | Dependency-installed MCP stdio handshake | PASS_AT_PRIOR_BASELINE | Node 20/22 CI and local environment | Public path predates mandatory contract enforcement |
 | EVD-0007 | Task Contract 2.4 full strict suite from fresh branch archive | PASS | lifecycle scripts disabled; 2026-08-27 | 83 passed, 0 failed, 0 skipped; independent review still absent |
-| EVD-0008 | Draft PR #3 exact final-head Linux matrix | POST_COMMIT_READBACK_REQUIRED | GitHub Node 20/22 | Required before reporting TURN-0003 synchronized |
+| EVD-0008 | Draft PR #3 exact-head Linux matrix at `0783704f` | FAIL | GitHub Node 20/22 | Superseded by the repaired integrated PR #4 candidate; do not report TURN-0003 CI success |
+| EVD-0009 | PR #4 CI failure reproduction and migration repair | PASS_LOCAL | Exact failing tests plus focused reruns; 2026-08-27 | Three deterministic failures repaired; remote rerun pending |
+| EVD-0010 | Trusted adapter registry and default-deny MCP tests | PASS_LOCAL | Registry, MCP, public-finalizer focused tests | Server-owned factories and unclassified-tool rejection covered |
+| EVD-0011 | Installed MCP and package deployment checks | PASS_LOCAL | Real checkout stdio handshake, npm-linked binary handshake, `npm pack --dry-run` | 8 tools callable; 94 package entries; not publication |
 
 ## Contract-authority acceptance matrix
 
@@ -25,10 +28,10 @@
 | Named-check content identity | TESTED | Policy/executable/args/cwd/result/context cases included |
 | Evidence/lifecycle verifier binding | TESTED | Context-free verifier rejection included |
 | Strict final orchestrator | TESTED | Extra receipt/context-free verifier cases included |
-| Public MCP/Skill enforcement | NOT_IMPLEMENTED | TASK-0007 fail-closed integration tests |
+| Public MCP/Skill enforcement | TESTED_LOCAL_PENDING_REMOTE | Contract-free/mismatched inputs, trusted registry, and default-deny tests pass |
 | Independent acceptance | NOT_ASSESSED | Different reviewer context/model/human/CI as required |
 | Release readiness | BLOCKED | Merge/release/publication/deployment gates are separate |
 
 ## Current conclusion
 
-Task Contract Protocol 2.4 is a tested author-developed staging candidate. It is not yet independently accepted, mandatory in public entrypoints, merged, release-ready, released, published, or deployed.
+Task Contract Protocol 2.4 and Public Enforcement 1.0 are an author-developed staging candidate. The public Claim/Review path is contract-mandatory in local tests, and the npm-linked package binary is locally deployed and callable. Exact-head remote CI and independent R2/R3 acceptance remain pending; the project is not merged, release-ready, published, or production-deployed.
