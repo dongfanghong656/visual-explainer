@@ -1,57 +1,36 @@
-# Task Proof extension
+# Task Proof strict runtime
 
-Task Proof adds evidence-gated completion diagrams to visual-explainer. It deliberately separates an implementing AI's declaration from an independent review.
+This directory contains the evidence-gated Task Proof runtime used by the Visual Explainer fork.
 
-## Stable workflow
+## Current authorities
 
-1. The claimant calls `task_proof_snapshot`, reconstructs the task contract, and submits a semantic claim with `task_proof_claim`.
-2. The claimant artifact is always marked `UNVERIFIED`.
-3. A different run independently reconstructs the acceptance criteria and collects fresh receipts with `task_proof_probe` and, after operator opt-in, `task_proof_run_checks`.
-4. Only `task_proof_review` may compute `PASS`, `PASS_WITH_LIMITS`, `FAIL`, or `INCONCLUSIVE`.
+- `STANDARD_V0.2.md` — Claim/evidence/review/diagram standard;
+- `SECURITY_V0.2.md` — repository, execution, output, and receipt boundaries;
+- `MCP_V0.2.md` — current six-tool MCP surface;
+- `CONTRACT_AUTHORITY_V2.4.md` — frozen Task Contract authority and final-gate rules;
+- `task-proof.schema.json` — Claim/Review migration shape;
+- `task-contract.schema.json` — strict Task Contract shape.
 
-The six MCP tools are:
+Historical `PROTOCOL.md`, `CONTRACT_AUTHORITY_V2.1.md`, and `CONTRACT_AUTHORITY_V2.3.md` are compatibility/tombstone documents, not current independent authorities.
 
-- `task_proof_snapshot`
-- `task_proof_probe`
-- `task_proof_run_checks`
-- `task_proof_validate_claim`
-- `task_proof_claim`
-- `task_proof_review`
+## Contract-core modules
 
-Read `STANDARD_V0.2.md`, `SECURITY_V0.2.md`, and `MCP_V0.2.md` before using the protocol. The machine-readable contract is `task-proof.schema.json`.
+- `contract-authority.mjs` — normalization, canonical digest, Claim/Review binding, receipt and assessment primitives;
+- `contract-final-gate.mjs` — canonical final-gate orchestrator;
+- `contract-authority.test.mjs` — primitive/adversarial tests;
+- `contract-final-gate.test.mjs` — orchestration and context-binding attacks;
+- `contract-authority-static.test.mjs` — schema/example/specification drift checks.
 
-## Start the dedicated MCP
+Public or release-adjacent integrations must call `computeStrictContractGate` from `contract-final-gate.mjs`. The lower-level calculator in `contract-authority.mjs` is not a public authorization boundary.
 
-From a source checkout:
+## Current maturity
 
-```bash
-node plugins/visual-explainer/task-proof/mcp-server.mjs
-```
-
-From an installed package:
-
-```bash
-visual-explainer-task-proof-mcp
-```
-
-Named repository checks are disabled by default. Review `.task-proof/checks.json` before enabling them:
-
-```bash
-TASK_PROOF_ALLOW_EXECUTION=1 visual-explainer-task-proof-mcp
-```
-
-The server and its stdio test client use the official split MCP v2 packages. Node.js 20 or newer is required.
+Task Contract Protocol 2.4 is an isolated staging candidate in draft PR #3. It is not yet mandatory in the existing public Author/Reviewer/MCP/Skill paths. Therefore the project must not claim contract-enforced final acceptance until TASK-0007 is complete and independently reviewed.
 
 ## Verification
 
 ```bash
-npm run check:task-proof
-TASK_PROOF_ALLOW_EXECUTION=1 npm run test:task-proof
-npm run test:task-proof:mcp
+npm run verify:task-proof
 ```
 
-The last command performs both a tool-contract check and a real stdio client/server handshake. Source-level tests do not prove release, deployment, hardware, external-system, or user acceptance.
-
-## Artifact boundary
-
-JSON is the fact source. SVG and HTML are deterministic views. Immutable bundles are stored below `.artifacts/task-proof/` and are bound to their claim/review digest and repository snapshot. A screenshot or PNG without its JSON and manifest is presentation only.
+The strict runner discovers every `*.test.mjs` file. Exact final-head Node 20/22 CI, clean readback, and a distinct R2/R3 review remain required before integration.
