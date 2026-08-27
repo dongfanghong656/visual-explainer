@@ -1,36 +1,111 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/dongfanghong656/visual-explainer/task-proof/task-contract-2.3.0.schema.json",
+  "$id": "https://github.com/dongfanghong656/visual-explainer/task-proof/task-contract-2.4.0.schema.json",
   "title": "Task Proof frozen task contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "kind", "contractId", "taskId", "repository", "authority", "sources", "scope", "requirements", "criteria", "evidencePolicies", "reviewPolicy", "lifecycle", "amendment"],
+  "required": [
+    "schemaVersion",
+    "kind",
+    "contractId",
+    "taskId",
+    "repository",
+    "authority",
+    "sources",
+    "scope",
+    "requirements",
+    "criteria",
+    "evidencePolicies",
+    "reviewPolicy",
+    "lifecycle",
+    "amendment"
+  ],
   "properties": {
-    "schemaVersion": { "const": "2.3.0" },
-    "kind": { "const": "task-contract" },
-    "contractId": { "$ref": "#/$defs/stableId" },
-    "taskId": { "$ref": "#/$defs/stableId" },
-    "repository": { "type": "string", "minLength": 1, "maxLength": 512 },
-    "authority": { "$ref": "#/$defs/authority" },
-    "sources": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/source" } },
-    "scope": { "$ref": "#/$defs/scope" },
-    "requirements": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "#/$defs/sourceRequirement" } },
+    "schemaVersion": {
+      "const": "2.4.0"
+    },
+    "kind": {
+      "const": "task-contract"
+    },
+    "contractId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "taskId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "authority": {
+      "$ref": "#/$defs/authority"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "scope": {
+      "$ref": "#/$defs/scope"
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/sourceRequirement"
+      }
+    },
     "criteria": {
       "type": "array",
       "minItems": 1,
       "maxItems": 128,
-      "contains": { "type": "object", "required": ["criticality"], "properties": { "criticality": { "const": "blocking" } } },
-      "items": { "$ref": "#/$defs/criterion" }
+      "contains": {
+        "type": "object",
+        "required": ["criticality"],
+        "properties": {
+          "criticality": { "const": "blocking" }
+        }
+      },
+      "items": {
+        "$ref": "#/$defs/criterion"
+      }
     },
-    "evidencePolicies": { "$ref": "#/$defs/evidencePolicies" },
-    "reviewPolicy": { "$ref": "#/$defs/reviewPolicy" },
-    "lifecycle": { "$ref": "#/$defs/lifecycle" },
-    "amendment": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/amendment" }] }
+    "evidencePolicies": {
+      "$ref": "#/$defs/evidencePolicies"
+    },
+    "reviewPolicy": {
+      "$ref": "#/$defs/reviewPolicy"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycle"
+    },
+    "amendment": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/amendment" }
+      ]
+    }
   },
   "$defs": {
-    "stableId": { "type": "string", "minLength": 2, "maxLength": 128, "pattern": "^[A-Z][A-Z0-9._:-]{1,127}$" },
-    "gitOid": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$" },
-    "sha256": { "type": "string", "pattern": "^(?:sha256:)?[0-9a-f]{64}$" },
+    "stableId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 128,
+      "pattern": "^[A-Z][A-Z0-9._:-]{1,127}$"
+    },
+    "gitOid": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?:sha256:)?[0-9a-f]{64}$"
+    },
     "repositoryPath": {
       "type": "string",
       "minLength": 1,
@@ -41,25 +116,54 @@
         { "not": { "pattern": "(?:^|[/\\\\])\\.git(?:[/\\\\]|$)" } }
       ]
     },
-    "stringSet": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } },
+    "stringSet": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      }
+    },
     "authority": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["level", "issuerRole", "issuerRunId", "method", "issuedAt", "signature", "keyId", "limitations"],
+      "required": [
+        "level",
+        "issuerRole",
+        "issuerRunId",
+        "method",
+        "issuedAt",
+        "signature",
+        "keyId",
+        "limitations"
+      ],
       "properties": {
-        "level": { "enum": ["claimant_provisional", "user_attested", "project_approved", "issue_locked", "release_policy"] },
+        "level": {
+          "enum": ["claimant_provisional", "user_attested", "project_approved", "issue_locked", "release_policy"]
+        },
         "issuerRole": { "type": "string", "minLength": 1, "maxLength": 128 },
         "issuerRunId": { "type": "string", "minLength": 1, "maxLength": 256 },
-        "method": { "enum": ["procedural_attestation", "repository_source", "host_message_attestation", "github_issue_live", "release_registry_live", "cryptographic_signature"] },
+        "method": {
+          "enum": ["procedural_attestation", "repository_source", "host_message_attestation", "github_issue_live", "release_registry_live", "cryptographic_signature"]
+        },
         "issuedAt": { "type": "string", "format": "date-time" },
         "signature": { "type": ["string", "null"], "maxLength": 16384 },
         "keyId": { "type": ["string", "null"], "maxLength": 512 },
         "limitations": { "$ref": "#/$defs/stringSet" }
       },
-      "allOf": [{
-        "if": { "properties": { "method": { "const": "cryptographic_signature" } } },
-        "then": { "properties": { "signature": { "type": "string", "minLength": 1 }, "keyId": { "type": "string", "minLength": 1 } } }
-      }]
+      "allOf": [
+        {
+          "if": { "properties": { "method": { "const": "cryptographic_signature" } } },
+          "then": {
+            "properties": {
+              "signature": { "type": "string", "minLength": 1 },
+              "keyId": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
     },
     "source": {
       "type": "object",
@@ -70,15 +174,28 @@
         "type": { "enum": ["repository_file", "user_message", "github_issue", "release_policy"] },
         "locator": { "type": "string", "minLength": 1, "maxLength": 2048 },
         "revision": { "type": ["string", "null"], "maxLength": 128 },
-        "sha256": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "sha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
         "precedence": { "type": "integer", "minimum": 0, "maximum": 10000 },
         "description": { "type": ["string", "null"], "maxLength": 4096 },
         "assurance": { "type": ["string", "null"], "maxLength": 128 }
       },
-      "allOf": [{
-        "if": { "properties": { "type": { "const": "repository_file" } } },
-        "then": { "properties": { "locator": { "$ref": "#/$defs/repositoryPath" }, "revision": { "$ref": "#/$defs/gitOid" }, "sha256": { "$ref": "#/$defs/sha256" } } }
-      }]
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "repository_file" } } },
+          "then": {
+            "properties": {
+              "locator": { "$ref": "#/$defs/repositoryPath" },
+              "revision": { "$ref": "#/$defs/gitOid" },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      ]
     },
     "scope": {
       "type": "object",
@@ -86,10 +203,25 @@
       "required": ["baseRevision", "includedOutcomes", "excludedOutcomes", "includedPaths", "excludedPaths"],
       "properties": {
         "baseRevision": { "$ref": "#/$defs/gitOid" },
-        "includedOutcomes": { "allOf": [{ "$ref": "#/$defs/stringSet" }, { "minItems": 1 }] },
+        "includedOutcomes": {
+          "allOf": [
+            { "$ref": "#/$defs/stringSet" },
+            { "minItems": 1 }
+          ]
+        },
         "excludedOutcomes": { "$ref": "#/$defs/stringSet" },
-        "includedPaths": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } },
-        "excludedPaths": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } }
+        "includedPaths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "excludedPaths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        }
       }
     },
     "sourceRequirement": {
@@ -101,14 +233,21 @@
         "sourceId": { "$ref": "#/$defs/stableId" },
         "statement": { "type": "string", "minLength": 1, "maxLength": 8192 },
         "disposition": { "enum": ["covered", "explicitly_excluded", "deferred_with_authority", "superseded"] },
-        "criterionIds": { "type": "array", "maxItems": 128, "uniqueItems": true, "items": { "$ref": "#/$defs/stableId" } },
+        "criterionIds": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/stableId" }
+        },
         "authorityReason": { "type": ["string", "null"], "maxLength": 8192 }
       },
-      "allOf": [{
-        "if": { "properties": { "disposition": { "const": "covered" } } },
-        "then": { "properties": { "criterionIds": { "minItems": 1 } } },
-        "else": { "properties": { "authorityReason": { "type": "string", "minLength": 1 } } }
-      }]
+      "allOf": [
+        {
+          "if": { "properties": { "disposition": { "const": "covered" } } },
+          "then": { "properties": { "criterionIds": { "minItems": 1 } } },
+          "else": { "properties": { "authorityReason": { "type": "string", "minLength": 1 } } }
+        }
+      ]
     },
     "criterion": {
       "type": "object",
@@ -120,14 +259,27 @@
         "criticality": { "enum": ["blocking", "non_blocking", "advisory"] },
         "requiredEvidenceKinds": { "$ref": "#/$defs/stringSet" },
         "requiredEvidenceLocators": { "$ref": "#/$defs/stringSet" },
-        "sourceRequirementRefs": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/stableId" } },
+        "sourceRequirementRefs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/stableId" }
+        },
         "environment": { "type": ["string", "null"], "maxLength": 2048 },
         "limitations": { "$ref": "#/$defs/stringSet" }
       },
-      "allOf": [{
-        "if": { "properties": { "criticality": { "const": "blocking" } } },
-        "then": { "properties": { "requiredEvidenceKinds": { "minItems": 1 }, "requiredEvidenceLocators": { "minItems": 1 } } }
-      }]
+      "allOf": [
+        {
+          "if": { "properties": { "criticality": { "const": "blocking" } } },
+          "then": {
+            "properties": {
+              "requiredEvidenceKinds": { "minItems": 1 },
+              "requiredEvidenceLocators": { "minItems": 1 }
+            }
+          }
+        }
+      ]
     },
     "namedCheckPolicy": {
       "type": "object",
@@ -146,7 +298,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["namedChecks"],
-      "properties": { "namedChecks": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/namedCheckPolicy" } } }
+      "properties": {
+        "namedChecks": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/namedCheckPolicy" }
+        }
+      }
     },
     "reviewPolicy": {
       "type": "object",
@@ -164,14 +322,29 @@
       "required": ["status", "supersededByContractId", "supersededByContractDigest", "revokedReason"],
       "properties": {
         "status": { "enum": ["active", "superseded", "revoked"] },
-        "supersededByContractId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/stableId" }] },
-        "supersededByContractDigest": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "supersededByContractId": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/stableId" }
+          ]
+        },
+        "supersededByContractDigest": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256" }
+          ]
+        },
         "revokedReason": { "type": ["string", "null"], "maxLength": 8192 }
       },
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "superseded" } } },
-          "then": { "properties": { "supersededByContractId": { "$ref": "#/$defs/stableId" }, "supersededByContractDigest": { "$ref": "#/$defs/sha256" } } }
+          "then": {
+            "properties": {
+              "supersededByContractId": { "$ref": "#/$defs/stableId" },
+              "supersededByContractDigest": { "$ref": "#/$defs/sha256" }
+            }
+          }
         },
         {
           "if": { "properties": { "status": { "const": "revoked" } } },
