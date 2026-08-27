@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.3.0",
+  "schemaVersion": "2.4.0",
   "kind": "task-contract",
   "contractId": "TPC-0001",
   "taskId": "TASK-0007",
@@ -9,7 +9,7 @@
     "issuerRole": "project-owner",
     "issuerRunId": "owner-run-001",
     "method": "repository_source",
-    "issuedAt": "2026-08-26T12:00:00.000Z",
+    "issuedAt": "2026-08-27T00:00:00.000Z",
     "signature": null,
     "keyId": null,
     "limitations": [
@@ -56,7 +56,7 @@
   "criteria": [
     {
       "id": "AC-CONTRACT-001",
-      "statement": "A final PASS is impossible without an exact contract digest, authority verification receipt, complete review artifact, and frozen named-check policy.",
+      "statement": "A final PASS is impossible without an exact contract digest, authority verification receipts, complete review artifact, trusted evidence assessment, frozen named-check policy, and trusted lifecycle assessment.",
       "criticality": "blocking",
       "requiredEvidenceKinds": [
         "test"

@@ -13,18 +13,20 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const schema = JSON.parse(readFileSync(join(here, 'task-contract.schema.json'), 'utf8'));
 const example = JSON.parse(readFileSync(join(here, 'examples', 'task-contract.example.json'), 'utf8'));
-const currentDoc = readFileSync(join(here, 'CONTRACT_AUTHORITY_V2.3.md'), 'utf8');
-const oldDoc = readFileSync(join(here, 'CONTRACT_AUTHORITY_V2.1.md'), 'utf8');
+const currentDoc = readFileSync(join(here, 'CONTRACT_AUTHORITY_V2.4.md'), 'utf8');
+const old21 = readFileSync(join(here, 'CONTRACT_AUTHORITY_V2.1.md'), 'utf8');
+const old23 = readFileSync(join(here, 'CONTRACT_AUTHORITY_V2.3.md'), 'utf8');
 
 test('runtime, schema, example, and documentation use one contract version', () => {
-  assert.equal(TASK_CONTRACT_VERSION, '2.3.0');
-  assert.equal(AUTHORITY_RECEIPT_VERSION, '1.2.0');
+  assert.equal(TASK_CONTRACT_VERSION, '2.4.0');
+  assert.equal(AUTHORITY_RECEIPT_VERSION, '1.4.0');
   assert.equal(schema.properties.schemaVersion.const, TASK_CONTRACT_VERSION);
   assert.equal(example.schemaVersion, TASK_CONTRACT_VERSION);
-  assert.match(currentDoc, /Protocol version: `2\.3\.0`/);
-  assert.match(currentDoc, /Authority receipt version: `1\.2\.0`/);
-  assert.match(oldDoc, /Superseded/);
-  assert.match(oldDoc, /CONTRACT_AUTHORITY_V2\.3\.md/);
+  assert.match(currentDoc, /Protocol version: `2\.4\.0`/);
+  assert.match(currentDoc, /Authority receipt version: `1\.4\.0`/);
+  assert.match(old21, /Superseded/);
+  assert.match(old23, /Superseded/);
+  assert.match(old23, /CONTRACT_AUTHORITY_V2\.4\.md/);
 });
 
 test('current example passes executable normalization and produces a stable digest', () => {
