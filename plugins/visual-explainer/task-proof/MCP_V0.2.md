@@ -42,9 +42,11 @@ Example client configuration:
 | `task_proof_snapshot` | None | Pin rename-safe Git state and dirty-file content without raw patches |
 | `task_proof_probe` | None | Produce criterion-bound safe observation receipts and reject an in-flight snapshot race |
 | `task_proof_run_checks` | Executes named repository checks when explicitly enabled | Produce criterion-bound policy-typed test/build receipts |
-| `task_proof_validate_claim` | None | Validate and digest a claim |
-| `task_proof_claim` | Writes immutable `.artifacts/task-proof/` content | Bind, validate, and render an unverified claim |
-| `task_proof_review` | Observes; may run explicitly enabled named checks; writes immutable artifacts | Resnapshot, enforce criterion and locator coverage, compute the gate, and render the review |
+| `task_proof_validate_contract` | None | Normalize a frozen Task Contract and expose its digest, authority, coverage cap, and reviewer policy |
+| `task_proof_contract_source_receipt` | Read-only Git observation | Reopen a repository-file source and issue an exact reviewer-bound authority receipt |
+| `task_proof_validate_claim` | None | Validate a Claim against the supplied frozen Task Contract |
+| `task_proof_claim` | Writes immutable `.artifacts/task-proof/` content | Bind, validate, and render an unverified Claim using the supplied frozen Task Contract |
+| `task_proof_review` | Observes; may run explicitly enabled named checks; writes immutable artifacts | Require contract authority receipts and reviewer attestation, compute the legacy evidence gate plus authoritative strict contract gate, and render the Review |
 
 The server never accepts an arbitrary command, executable, evidence type, or policy path from the MCP caller. A legacy request may repeat `kind`, but it must exactly match the repository policy and cannot relabel evidence.
 
@@ -52,20 +54,24 @@ The server never accepts an arbitrary command, executable, evidence type, or pol
 
 ```text
 claimant agent
+  → task_proof_validate_contract
   → task_proof_snapshot
   → collect claimant implementation evidence
-  → task_proof_claim
+  → task_proof_claim(contract, claim)
   → UNVERIFIED JSON/SVG/HTML/manifest
 
 independent reviewer run
+  → load and independently validate the same frozen contract
+  → task_proof_contract_source_receipt for every repository authority source
   → reconstruct requirements and acceptance criteria
   → set requiredEvidenceKinds and exact requiredEvidenceLocators
   → task_proof_snapshot
   → task_proof_probe and/or task_proof_run_checks
   → each probe confirms the repository did not change during observation
   → verify complete dirty-content fingerprint
-  → task_proof_review performs a final snapshot comparison
-  → PASS / PASS_WITH_LIMITS / FAIL / INCONCLUSIVE
+  → task_proof_review performs a final snapshot comparison and strict contract orchestration
+  → legacyGate for evidence accounting
+  → contractGate: PASS / PASS_WITH_LIMITS / FAIL / INCONCLUSIVE / STALE
 ```
 
 Every probe/check request declares the claim IDs and criterion IDs it supports. `task_proof_review` accepts no free-form review-evidence array; it collects evidence itself, rejects snapshot races, rejects incomplete dirty snapshots, and downgrades uncovered full or partial verification requests.
@@ -77,3 +83,7 @@ Artifacts are stored under a digest-addressed directory containing exactly JSON,
 ## Compatibility and CI
 
 The stdio entry point uses `serveStdio(createServer)` and the client handshake uses `@modelcontextprotocol/client/stdio`. CI installs dependencies with lifecycle scripts disabled, runs deterministic source/JSON checks, executes every discovered `*.test.mjs`, and performs a real list-tools plus snapshot call on Node.js 20 and 22. GitHub Actions are pinned to full commit SHAs.
+
+## Contract enforcement boundary
+
+The public Claim and Review tools require a Task Contract. A claimant-provisional contract is visibly capped at `INCONCLUSIVE`. The built-in authority adapter supports repository-file sources only. Other authority types require a separately trusted adapter and cannot be upgraded by labels or prose. `review.gate` is the retained legacy evidence assessment; `review.contractGate` and the MCP top-level `gate` are the authoritative task-acceptance result. Neither implies merge or release. See `PUBLIC_CONTRACT_ENFORCEMENT_V1.md`.
