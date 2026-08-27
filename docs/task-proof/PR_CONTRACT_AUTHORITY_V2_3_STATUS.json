@@ -1,0 +1,10 @@
+{
+  "kind": "stacked-draft-pr-plan",
+  "head": "stage/task-proof-visualizer/turn-0003-contract-authority",
+  "base": "chat/task-proof-visualizer/v0.1.0-recovery",
+  "title": "feat(task-proof): harden frozen contract authority protocol 2.3",
+  "draft": true,
+  "state": "CREATE_REQUEST_PENDING",
+  "merge": "BLOCKED",
+  "release": "NOT_RELEASED"
+}
