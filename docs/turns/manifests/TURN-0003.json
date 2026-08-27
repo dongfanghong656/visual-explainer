@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0.0",
+  "turnId": "TURN-0003",
+  "date": "2026-08-27",
+  "repository": "dongfanghong656/visual-explainer",
+  "branch": "stage/task-proof-visualizer/turn-0003-contract-authority",
+  "baseRevision": "f2c0ced20615ffea3c92ddda7bd329dfc056832f",
+  "resultRevision": "PENDING_SELF_REFERENCE",
+  "checkpoint": "CHK-0003",
+  "protocolCandidate": "2.3.0",
+  "authorityReceiptCandidate": "1.2.0",
+  "tasks": [
+    "harden frozen contract authority",
+    "freeze named-check semantics",
+    "bind final reviewer authority receipt",
+    "add source-requirement coverage"
+  ],
+  "artifacts": [
+    "plugins/visual-explainer/task-proof/contract-authority.mjs",
+    "plugins/visual-explainer/task-proof/contract-authority.test.mjs",
+    "plugins/visual-explainer/task-proof/contract-authority-static.test.mjs",
+    "plugins/visual-explainer/task-proof/task-contract.schema.json",
+    "plugins/visual-explainer/task-proof/examples/task-contract.example.json",
+    "plugins/visual-explainer/task-proof/CONTRACT_AUTHORITY_V2.3.md"
+  ],
+  "verification": {
+    "localTargeted": "EXECUTED_BEFORE_SYNC",
+    "remoteNode20": "PENDING",
+    "remoteNode22": "PENDING",
+    "independentReview": "NOT_ASSESSED"
+  },
+  "release": "NOT_RELEASED",
+  "sync": "PENDING_REMOTE_CI_AND_READBACK",
+  "notes": [
+    "PENDING_SELF_REFERENCE is used to avoid a recursive same-commit SHA update.",
+    "Public MCP and Skill paths do not yet enforce the contract core."
+  ]
+}
