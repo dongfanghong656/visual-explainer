@@ -2,7 +2,7 @@
 
 ## Current objective
 
-Finish release-hardening exact-head verification, obtain a genuinely distinct R2/R3 review, integrate PR #4 into `main`, and deploy the verified GitHub prerelease into Codex.
+Maintain and observe the deployed repository-authority alpha without overstating its accepted limitations.
 
 ## Repository state
 
@@ -10,13 +10,13 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 - Main recovery branch: `chat/task-proof-visualizer/v0.1.0-recovery`
 - Public-enforcement branch: `stage/task-proof-visualizer/turn-0004-public-enforcement`
 - Starting revision for TURN-0004 repair/improvement: `598006bc322cb7cb220085c63f46a71a263f4636`
-- Draft integration PR: `#2`
-- Draft stacked contract PR: `#3`
-- Ready combined public/release PR targeting `main`: `#4`
+- Superseded/closed integration PR: `#2`
+- Superseded/closed stacked contract PR: `#3`
+- Merged combined public/release PR: `#4`
 - Current turn: `TURN-0005`
 - Current checkpoint: `CHK-0005`
-- Result commit: `PENDING_SELF_REFERENCE`
-- Release: `USER_AUTHORIZED_R2_PASS_WITH_LIMITS_PENDING_MERGE_TAG`
+- Result commit: `d83a07290b2658c2936d6040c7ff4f60316b6930`
+- Release: `GITHUB_PRERELEASE_PUBLISHED_AND_CODEX_DEPLOYED_WITH_R2_LIMITS`
 
 ## Implemented candidate
 
@@ -33,16 +33,16 @@ Finish release-hardening exact-head verification, obtain a genuinely distinct R2
 
 - PR #4 HEAD `f1f665d` passed the release-delta exact-head Node 20 and Node 22 checks plus the separate R2 review in run `33077129005`.
 - R2 returned `PASS_WITH_LIMITS`: automated CI isolation does not prove a different human/model, and unsupported external authority adapters remain capped at `INCONCLUSIVE`.
-- The later documentation-only head `2515181` passed its matrix and R2 verification work but the final report rejected the progressed authorized release-decision state; the exact-field compatibility repair and executable regression are local pending final CI.
+- Final PR head `96afc5f` passed Node 20/22 and R2 in run `33077809112`; PR #4 merged as `d83a072`.
+- Tag run `33077966508` published `v0.11.0-alpha.1`; the downloaded asset digest matched GitHub, the normal global install served all eight tools, the Skill is installed, and Codex lists the MCP as enabled.
 - Current development and review are from the same long-running implementation context.
-- Local npm-linked and clean temporary package deployments exist; no merge, tag, public release, downloaded-asset deployment, hardware validation, scientific validation, or user-outcome observation exists yet.
+- The public alpha is deployed on this Codex host; hardware validation, scientific validation, stable promotion, and long-term user-outcome observation do not exist.
 
-## Open blockers
+## Open limitations
 
 - a different-human/model R3 review remains absent and is an accepted alpha limitation;
-- final exact-head report CI, `main` integration, tag workflow, and public-asset readback remain incomplete;
 - RSK-0005 and RSK-0007 remain disclosed alpha limitations; unsupported external authority cannot produce `PASS`.
 
 ## Exact next action
 
-Push the report-state compatibility repair, require Node 20/22 plus the distinct R2 job to pass for its exact PR #4 HEAD, then merge, tag, publish, download, install, and read back the public artifact.
+Observe the deployment, collect real user outcomes, and obtain a different-human/model R3 review before considering stable promotion or expanding beyond repository-file authority.
