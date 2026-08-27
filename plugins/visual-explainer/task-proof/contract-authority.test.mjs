@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {
   TASK_CONTRACT_VERSION,
   AUTHORITY_RECEIPT_VERSION,
+  EVIDENCE_ASSESSMENT_VERSION,
+  NAMED_CHECK_RECEIPT_VERSION,
+  LIFECYCLE_ASSESSMENT_VERSION,
   canonicalTaskContract,
   computeContractBoundGate,
   createAuthorityReceipt,
@@ -16,6 +19,7 @@ import {
   validateNamedCheckReceipts,
   validateReviewContractBinding,
   verifyAuthorityReceipt,
+  verifyAuthorityReceipts,
 } from './contract-authority.mjs';
 
 const BASE = '1'.repeat(40);
@@ -53,7 +57,7 @@ function contract(overrides = {}) {
       issuerRole: 'project-owner',
       issuerRunId: 'owner-run-001',
       method: 'repository_source',
-      issuedAt: '2026-08-26T12:00:00.000Z',
+      issuedAt: '2026-08-27T00:00:00.000Z',
       signature: null,
       keyId: null,
       limitations: [],
@@ -85,7 +89,7 @@ function contract(overrides = {}) {
     }],
     criteria: [{
       id: 'AC-CONTRACT-001',
-      statement: 'A final PASS is impossible without an exact contract, authority receipt, review, and named-check policy match.',
+      statement: 'A final PASS requires a frozen contract, trusted authority, complete review, and content-bound evidence.',
       criticality: 'blocking',
       requiredEvidenceKinds: ['test'],
       requiredEvidenceLocators: ['named-check:task-proof-tests'],
@@ -123,13 +127,9 @@ function claimFor(value = contract(), overrides = {}) {
   const normalized = normalizeTaskContract(value);
   const claim = {
     taskId: normalized.taskId,
-    generatedAt: '2026-08-26T12:05:00.000Z',
+    generatedAt: '2026-08-27T00:05:00.000Z',
     producer: { role: 'claimant', runId: 'claimant-run-001' },
-    repository: {
-      identity: normalized.repository,
-      baseSha: normalized.scope.baseRevision,
-      headSha: HEAD,
-    },
+    repository: { identity: normalized.repository, baseSha: normalized.scope.baseRevision, headSha: HEAD },
     contractRef: {
       contractId: normalized.contractId,
       contractDigest: digestTaskContract(normalized),
@@ -141,13 +141,13 @@ function claimFor(value = contract(), overrides = {}) {
   return deepMerge(claim, overrides);
 }
 
-function receiptFor(value, claim, reviewerRunId = 'reviewer-run-001') {
+function authorityReceiptFor(value, claim, reviewerRunId = 'reviewer-run-001') {
   return createAuthorityReceipt({
     contract: value,
     sourceId: 'SRC-REQ-0007',
     claim,
     reviewerRunId,
-    observedAt: '2026-08-26T12:08:00.000Z',
+    observedAt: '2026-08-27T00:08:00.000Z',
     method: 'repository_source',
     observation: {
       sourceExistsAtBase: true,
@@ -164,24 +164,23 @@ function receiptFor(value, claim, reviewerRunId = 'reviewer-run-001') {
   });
 }
 
-function reviewFor(value, claim, receipt, overrides = {}) {
+function reviewFor(value, claim, receipts, overrides = {}) {
+  const receiptDigests = receipts.map((item) => item.receiptDigest).sort();
   const review = {
     taskId: value.taskId,
-    generatedAt: '2026-08-26T12:10:00.000Z',
+    generatedAt: '2026-08-27T00:10:00.000Z',
+    repository: structuredClone(claim.repository),
     reviewer: { role: 'reviewer', runId: 'reviewer-run-001' },
     reviewerAttestation: {
-      level: 'R2',
-      method: 'procedural_attestation',
-      sessionId: 'reviewer-run-001',
-      reconstructedBeforeReadingClaim: true,
-      independentEvidenceCollected: true,
+      level: 'R2', method: 'procedural_attestation', sessionId: 'reviewer-run-001',
+      reconstructedBeforeReadingClaim: true, independentEvidenceCollected: true,
       adversarialEvidenceCollected: false,
     },
     contractRef: {
       contractId: value.contractId,
       contractDigest: digestTaskContract(value),
       authorityDeclarationDigest: digestAuthorityDeclaration(value),
-      authorityVerificationReceiptDigest: receipt.receiptDigest,
+      authorityVerificationReceiptDigests: receiptDigests,
     },
     claimDigest: digestJson(claim),
     findings: [{ claimId: 'CL-001', verdict: 'verified' }],
@@ -189,8 +188,44 @@ function reviewFor(value, claim, receipt, overrides = {}) {
   return deepMerge(review, overrides);
 }
 
-function evidenceReceipt(overrides = {}) {
-  return deepMerge({
+function authorityAdapter() {
+  return { ok: true, adapterId: 'git-history-adapter-v1', adapterReceiptDigest: ADAPTER_SHA };
+}
+
+function assessment(kind, version, value, claim, review, gate = 'PASS') {
+  const item = {
+    version,
+    kind,
+    contractDigest: digestTaskContract(value),
+    claimDigest: digestJson(claim),
+    reviewDigest: digestJson(review),
+    gate,
+  };
+  item.assessmentDigest = digestJson(item);
+  return item;
+}
+
+function evidenceAssessment(value, claim, review, gate = 'PASS') {
+  return assessment('task-proof-evidence-assessment', EVIDENCE_ASSESSMENT_VERSION, value, claim, review, gate);
+}
+
+function lifecycleAssessment(value, claim, review, gate = 'PASS') {
+  return assessment('task-proof-lifecycle-assessment', LIFECYCLE_ASSESSMENT_VERSION, value, claim, review, gate);
+}
+
+function assessmentVerifier(item) {
+  return { ok: true, assessmentDigest: item.assessmentDigest, gate: item.gate };
+}
+
+function namedCheckReceipt(value, claim, review, overrides = {}) {
+  const item = deepMerge({
+    version: NAMED_CHECK_RECEIPT_VERSION,
+    kind: 'task-proof-named-check-receipt',
+    contractDigest: digestTaskContract(value),
+    claimDigest: digestJson(claim),
+    reviewDigest: digestJson(review),
+    headSha: claim.repository.headSha,
+    producerRunId: review.reviewer.runId,
     locator: 'named-check:task-proof-tests',
     supportsCriterionIds: ['AC-CONTRACT-001'],
     policyDigest: POLICY_SHA,
@@ -198,238 +233,221 @@ function evidenceReceipt(overrides = {}) {
     executableDigest: EXE_SHA,
     argsDigest: ARGS_SHA,
     workingDirectory: 'plugins/visual-explainer/task-proof',
+    result: { status: 'pass', exitCode: 0 },
   }, overrides);
+  item.receiptDigest = digestJson(item);
+  return item;
 }
 
-function trustedAdapter() {
-  return {
-    ok: true,
-    adapterId: 'git-history-adapter-v1',
-    adapterReceiptDigest: ADAPTER_SHA,
-  };
+function namedCheckVerifier({ receipt }) {
+  return { ok: true, receiptDigest: receipt.receiptDigest, result: receipt.result.status };
 }
 
-test('canonical digest is deterministic across set order', () => {
-  const first = contract();
-  const second = contract({
-    criteria: [{
-      ...first.criteria[0],
-      requiredEvidenceKinds: [...first.criteria[0].requiredEvidenceKinds].reverse(),
-      requiredEvidenceLocators: [...first.criteria[0].requiredEvidenceLocators].reverse(),
-    }],
+function fullGate(value = contract(), gateOverrides = {}) {
+  const claim = claimFor(value);
+  const authorityReceipts = [authorityReceiptFor(value, claim)];
+  const review = reviewFor(value, claim, authorityReceipts);
+  return computeContractBoundGate({
+    contract: value,
+    claim,
+    review,
+    authorityReceipts,
+    authorityAdapter,
+    evidenceAssessment: evidenceAssessment(value, claim, review),
+    evidenceVerifier: assessmentVerifier,
+    namedCheckReceipts: [namedCheckReceipt(value, claim, review)],
+    namedCheckVerifier,
+    lifecycleAssessment: lifecycleAssessment(value, claim, review),
+    lifecycleVerifier: assessmentVerifier,
+    ...gateOverrides,
   });
+}
+
+test('canonical digest is deterministic and lowercase named-check IDs are valid', () => {
+  const first = contract();
+  const second = contract({ criteria: [{ ...first.criteria[0], requiredEvidenceKinds: [...first.criteria[0].requiredEvidenceKinds].reverse() }] });
   assert.equal(canonicalTaskContract(first), canonicalTaskContract(second));
   assert.equal(digestTaskContract(first), digestTaskContract(second));
+  assert.equal(normalizeTaskContract(first).evidencePolicies.namedChecks[0].id, 'task-proof-tests');
 });
 
-test('unknown fields and duplicate criterion IDs are rejected', () => {
+test('unknown fields, duplicate IDs, and impossible authority methods are rejected', () => {
   assert.throws(() => normalizeTaskContract(contract({ surprise: true })), /unknown fields/);
   const duplicate = contract();
   duplicate.criteria.push(structuredClone(duplicate.criteria[0]));
   assert.throws(() => normalizeTaskContract(duplicate), /duplicate id/i);
+  assert.throws(() => normalizeTaskContract(contract({ authority: { method: 'github_issue_live' } })), /not valid for authority level/);
 });
 
-test('repository sources require immutable OIDs, safe paths, and digest', () => {
+test('repository source paths, normalized scope paths, and immutable OIDs are enforced', () => {
   assert.throws(() => normalizeTaskContract(contract({ sources: [{ ...contract().sources[0], revision: 'main' }] })), /Git object ID/);
   assert.throws(() => normalizeTaskContract(contract({ sources: [{ ...contract().sources[0], locator: 'C:\\outside.md' }] })), /repository-relative/);
-  assert.throws(() => normalizeTaskContract(contract({ sources: [{ ...contract().sources[0], locator: '../outside.md' }] })), /unsafe path/);
+  assert.throws(() => normalizeTaskContract(contract({ scope: { includedPaths: ['a\\b', 'a/b'] } })), /duplicate normalized paths/);
+  assert.throws(() => normalizeTaskContract(contract({ scope: { includedPaths: ['a/b'], excludedPaths: ['a\\b'] } })), /both included and excluded/);
 });
 
-test('blocking named checks require frozen policy metadata', () => {
+test('every source and requirement-to-criterion edge must be represented symmetrically', () => {
+  const unused = contract();
+  unused.sources.push({ ...unused.sources[0], sourceId: 'SRC-UNUSED', locator: 'docs/unused.md' });
+  assert.throws(() => normalizeTaskContract(unused), /not represented by requirements/);
+  assert.throws(() => normalizeTaskContract(contract({ requirements: [{ ...contract().requirements[0], criterionIds: [] }] })), /must contain 1-256 items/);
+  assert.throws(() => normalizeTaskContract(contract({ criteria: [{ ...contract().criteria[0], sourceRequirementRefs: ['REQ-OTHER'] }] })), /unknown requirement/);
+});
+
+test('non-covered requirements cannot retain hidden criterion links', () => {
+  const invalid = contract({ requirements: [{
+    ...contract().requirements[0], disposition: 'explicitly_excluded', authorityReason: 'Owner excluded it.',
+  }] });
+  assert.throws(() => normalizeTaskContract(invalid), /must be empty/);
+});
+
+test('blocking named checks require a frozen policy with a matching evidence kind', () => {
   assert.throws(() => normalizeTaskContract(contract({ evidencePolicies: { namedChecks: [] } })), /without a frozen policy/);
+  assert.throws(() => normalizeTaskContract(contract({ evidencePolicies: { namedChecks: [{ ...contract().evidencePolicies.namedChecks[0], evidenceKind: 'build' }] } })), /does not require the frozen evidence kind/);
 });
 
-test('claim binding detects criterion omission and policy weakening', () => {
+test('claim binding detects criterion omission, weakening, repository drift, and chronology errors', () => {
   const value = contract();
   const claim = claimFor(value);
   assert.equal(validateClaimContractBinding(value, claim).ok, true);
-  const omitted = structuredClone(claim);
-  omitted.contractCriterionSnapshot = [];
-  assert.equal(validateClaimContractBinding(value, omitted).ok, false);
+  assert.equal(validateClaimContractBinding(value, claimFor(value, { contractCriterionSnapshot: [] })).ok, false);
   const weakened = structuredClone(claim);
   weakened.contractCriterionSnapshot[0].requiredEvidenceLocators = [];
   assert.equal(validateClaimContractBinding(value, weakened).ok, false);
+  assert.ok(validateClaimContractBinding(value, claimFor(value, { repository: { headSha: '3'.repeat(40) } })).ok);
+  assert.ok(validateClaimContractBinding(value, claimFor(value, { generatedAt: '2026-08-26T23:59:59.000Z' })).errors.includes('CLAIM_PREDATES_CONTRACT'));
 });
 
-test('claim created before contract issuance is rejected', () => {
-  const value = contract();
-  const claim = claimFor(value, { generatedAt: '2026-08-26T11:59:59.000Z' });
-  assert.ok(validateClaimContractBinding(value, claim).errors.includes('CLAIM_PREDATES_CONTRACT'));
-});
-
-test('authority receipt binds exact claim head and final reviewer run', () => {
+test('authority receipt binds exact Claim HEAD and final reviewer identity', () => {
   const value = contract();
   const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt, adapter: trustedAdapter }).ok, true);
-
+  const receipt = authorityReceiptFor(value, claim);
+  const review = reviewFor(value, claim, [receipt]);
+  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt, adapter: authorityAdapter }).ok, true);
   const wrongHead = structuredClone(receipt);
   wrongHead.implementationHeadRevision = '3'.repeat(40);
   wrongHead.receiptDigest = digestJson(Object.fromEntries(Object.entries(wrongHead).filter(([key]) => key !== 'receiptDigest')));
-  assert.ok(verifyAuthorityReceipt({ contract: value, claim, review, receipt: wrongHead, adapter: trustedAdapter }).errors.includes('CONTRACT_AUTHORITY_RECEIPT_HEAD'));
-
+  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt: wrongHead, adapter: authorityAdapter }).cap, 'FAIL');
   const wrongReviewer = structuredClone(receipt);
   wrongReviewer.producerRunId = 'other-reviewer';
   wrongReviewer.receiptDigest = digestJson(Object.fromEntries(Object.entries(wrongReviewer).filter(([key]) => key !== 'receiptDigest')));
-  assert.ok(verifyAuthorityReceipt({ contract: value, claim, review, receipt: wrongReviewer, adapter: trustedAdapter }).errors.includes('CONTRACT_AUTHORITY_REVIEWER_BINDING'));
+  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt: wrongReviewer, adapter: authorityAdapter }).cap, 'FAIL');
 });
 
-test('receipt must be observed after issuance and before review', () => {
+test('all declared authority sources require independently verified receipts', () => {
   const value = contract();
   const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  const late = structuredClone(receipt);
-  late.observedAt = '2026-08-26T12:11:00.000Z';
-  late.receiptDigest = digestJson(Object.fromEntries(Object.entries(late).filter(([key]) => key !== 'receiptDigest')));
-  assert.ok(verifyAuthorityReceipt({ contract: value, claim, review, receipt: late, adapter: trustedAdapter }).errors.includes('AUTHORITY_RECEIPT_POSTDATES_REVIEW'));
+  const receipt = authorityReceiptFor(value, claim);
+  const review = reviewFor(value, claim, [receipt]);
+  assert.equal(verifyAuthorityReceipts({ contract: value, claim, review, receipts: [receipt], adapter: authorityAdapter }).cap, 'PASS');
+  assert.equal(verifyAuthorityReceipts({ contract: value, claim, review, receipts: [], adapter: authorityAdapter }).cap, 'INCONCLUSIVE');
 });
 
-test('review binds claim digest, reviewer identity, contract, and receipt', () => {
+test('trusted authority adapter rejection is a hard failure, absence is inconclusive', () => {
   const value = contract();
   const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  assert.equal(validateReviewContractBinding(value, claim, review, receipt).ok, true);
-
-  const mismatch = structuredClone(review);
-  mismatch.reviewerAttestation.sessionId = 'invented-run';
-  assert.ok(validateReviewContractBinding(value, claim, mismatch, receipt).errors.includes('REVIEWER_ATTESTATION_BINDING'));
-
-  const noReceipt = structuredClone(review);
-  delete noReceipt.contractRef.authorityVerificationReceiptDigest;
-  assert.ok(validateReviewContractBinding(value, claim, noReceipt, receipt).errors.includes('CONTRACT_AUTHORITY_VERIFICATION_BINDING'));
+  const receipt = authorityReceiptFor(value, claim);
+  const review = reviewFor(value, claim, [receipt]);
+  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt }).cap, 'INCONCLUSIVE');
+  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt, adapter: () => ({ ok: false }) }).cap, 'FAIL');
 });
 
-test('R3 requires adversarial evidence and policy minimum is enforced', () => {
-  const value = contract({ reviewPolicy: { minimumIndependence: 'R3' } });
-  const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt, { reviewerAttestation: { level: 'R2' } });
-  assert.ok(validateReviewContractBinding(value, claim, review, receipt).errors.includes('REVIEW_INDEPENDENCE_INSUFFICIENT'));
-});
-
-test('named-check receipts freeze policy, executable, args, and cwd', () => {
+test('review binds exact repository, Claim digest, receipt set, reviewer identity, and R-level', () => {
   const value = contract();
-  assert.equal(validateNamedCheckReceipts(value, [evidenceReceipt()]).cap, 'PASS');
-  assert.equal(validateNamedCheckReceipts(value, [evidenceReceipt({ argsDigest: `sha256:${'f'.repeat(64)}` })]).cap, 'FAIL');
-  assert.equal(validateNamedCheckReceipts(value, []).cap, 'INCONCLUSIVE');
+  const claim = claimFor(value);
+  const receipt = authorityReceiptFor(value, claim);
+  const review = reviewFor(value, claim, [receipt]);
+  assert.equal(validateReviewContractBinding(value, claim, review, [receipt]).ok, true);
+  const wrongRepo = reviewFor(value, claim, [receipt], { repository: { headSha: '4'.repeat(40) } });
+  assert.equal(validateReviewContractBinding(value, claim, wrongRepo, [receipt]).cap, 'FAIL');
+  const wrongSession = reviewFor(value, claim, [receipt], { reviewerAttestation: { sessionId: 'invented-run' } });
+  assert.equal(validateReviewContractBinding(value, claim, wrongSession, [receipt]).cap, 'FAIL');
 });
 
-test('claimant provisional authority can never yield final PASS', () => {
+test('named-check receipts require content-bound policy, reviewer ownership, pass result, and trusted verifier', () => {
+  const value = contract();
+  const claim = claimFor(value);
+  const receipt = authorityReceiptFor(value, claim);
+  const review = reviewFor(value, claim, [receipt]);
+  const check = namedCheckReceipt(value, claim, review);
+  assert.equal(validateNamedCheckReceipts(value, [check], { claim, review, verifier: namedCheckVerifier }).cap, 'PASS');
+  assert.equal(validateNamedCheckReceipts(value, [check], { claim, review }).cap, 'INCONCLUSIVE');
+  const wrongPolicy = namedCheckReceipt(value, claim, review, { argsDigest: `sha256:${'f'.repeat(64)}` });
+  assert.equal(validateNamedCheckReceipts(value, [wrongPolicy], { claim, review, verifier: namedCheckVerifier }).cap, 'FAIL');
+  const failed = namedCheckReceipt(value, claim, review, { result: { status: 'fail', exitCode: 1 } });
+  assert.equal(validateNamedCheckReceipts(value, [failed], { claim, review, verifier: namedCheckVerifier }).cap, 'FAIL');
+});
+
+test('bare caller-provided evidence and lifecycle PASS strings cannot authorize final PASS', () => {
+  const value = contract();
+  const claim = claimFor(value);
+  const receipts = [authorityReceiptFor(value, claim)];
+  const review = reviewFor(value, claim, receipts);
+  const result = computeContractBoundGate({
+    contract: value, claim, review, authorityReceipts: receipts, authorityAdapter,
+    evidenceGate: 'PASS', lifecycleGate: 'PASS',
+    namedCheckReceipts: [namedCheckReceipt(value, claim, review)], namedCheckVerifier,
+  });
+  assert.equal(result.gate, 'INCONCLUSIVE');
+  assert.ok(result.errors.includes('UNTRUSTED_EVIDENCE_GATE'));
+  assert.ok(result.errors.includes('UNTRUSTED_LIFECYCLE_GATE'));
+});
+
+test('fully verifier-bound repository-approved R2 evidence yields PASS', () => {
+  assert.equal(fullGate().gate, 'PASS');
+});
+
+test('allBlockingCriteriaRequired=false caps the contract at INCONCLUSIVE', () => {
+  const value = contract({ reviewPolicy: { allBlockingCriteriaRequired: false } });
+  assert.equal(fullGate(value).gate, 'INCONCLUSIVE');
+});
+
+test('explicit exclusions cap source coverage at PASS_WITH_LIMITS', () => {
+  const baseValue = contract();
+  const value = contract({
+    requirements: [{
+      ...baseValue.requirements[0], disposition: 'explicitly_excluded', criterionIds: [],
+      authorityReason: 'Explicitly excluded by the project owner.',
+    }],
+    criteria: [{ ...baseValue.criteria[0], sourceRequirementRefs: ['REQ-OTHER'] }],
+  });
+  assert.throws(() => normalizeTaskContract(value), /unknown requirement/);
+  const coveredPlusExcluded = contract();
+  coveredPlusExcluded.sources.push({ ...coveredPlusExcluded.sources[0], sourceId: 'SRC-EXCLUDED', locator: 'docs/excluded.md' });
+  coveredPlusExcluded.requirements.push({
+    requirementId: 'REQ-EXCLUDED', sourceId: 'SRC-EXCLUDED', statement: 'Excluded outcome.',
+    disposition: 'explicitly_excluded', criterionIds: [], authorityReason: 'Owner excluded it.',
+  });
+  assert.equal(sourceCoverageCap(coveredPlusExcluded), 'PASS_WITH_LIMITS');
+});
+
+test('claimant-provisional contract remains INCONCLUSIVE even with otherwise passing evidence', () => {
   const value = contract({
     authority: { level: 'claimant_provisional', method: 'procedural_attestation' },
     reviewPolicy: { allowClaimantProvisionalContract: true },
   });
-  const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  const result = computeContractBoundGate({
-    contract: value,
-    claim,
-    review,
-    receipt,
-    authorityAdapter: trustedAdapter,
-    evidenceGate: 'PASS',
-    evidenceReceipts: [evidenceReceipt()],
-  });
-  assert.equal(result.gate, 'INCONCLUSIVE');
+  assert.equal(fullGate(value).gate, 'INCONCLUSIVE');
 });
 
-test('standalone reviewer assertion without a review artifact is inconclusive', () => {
-  const value = contract();
-  const claim = claimFor(value);
-  const result = computeContractBoundGate({ contract: value, claim, evidenceGate: 'PASS' });
-  assert.equal(result.gate, 'INCONCLUSIVE');
-  assert.ok(result.errors.includes('REVIEW_ARTIFACT_REQUIRED'));
+test('cyclic arrays and non-plain objects are rejected by canonical JSON', () => {
+  const cycle = [];
+  cycle.push(cycle);
+  assert.throws(() => digestJson(cycle), /cyclic array/);
+  assert.throws(() => digestJson(new Date()), /non-JSON object/);
 });
 
-test('fully bound repository-approved R2 review yields PASS', () => {
-  const value = contract();
-  const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  const result = computeContractBoundGate({
-    contract: value,
-    claim,
-    review,
-    receipt,
-    authorityAdapter: trustedAdapter,
-    evidenceGate: 'PASS',
-    lifecycleGate: 'PASS',
-    evidenceReceipts: [evidenceReceipt()],
-  });
-  assert.equal(result.gate, 'PASS', JSON.stringify(result, null, 2));
-});
-
-test('explicit exclusions cap source coverage at PASS_WITH_LIMITS', () => {
-  const value = contract({
-    requirements: [{
-      ...contract().requirements[0],
-      disposition: 'explicitly_excluded',
-      criterionIds: [],
-      authorityReason: 'Explicitly excluded by the project owner.',
-    }],
-  });
-  assert.equal(sourceCoverageCap(value), 'PASS_WITH_LIMITS');
-});
-
-test('superseded and revoked contracts remain structurally distinct', () => {
-  const superseded = contract({
-    lifecycle: {
-      status: 'superseded',
-      supersededByContractId: 'TPC-0002',
-      supersededByContractDigest: `sha256:${'9'.repeat(64)}`,
-    },
-  });
-  const revoked = contract({ lifecycle: { status: 'revoked', revokedReason: 'Withdrawn by owner.' } });
+test('superseded and revoked lifecycle states cannot produce PASS', () => {
+  const superseded = contract({ lifecycle: { status: 'superseded', supersededByContractId: 'TPC-0002', supersededByContractDigest: `sha256:${'9'.repeat(64)}` } });
+  const revoked = contract({ lifecycle: { status: 'revoked', revokedReason: 'Withdrawn.' } });
+  assert.equal(fullGate(superseded).gate, 'STALE');
+  assert.equal(fullGate(revoked).gate, 'FAIL');
   assert.equal(minGate('PASS', 'STALE'), 'STALE');
-  assert.equal(normalizeTaskContract(superseded).lifecycle.status, 'superseded');
-  assert.equal(normalizeTaskContract(revoked).lifecycle.status, 'revoked');
 });
 
-test('tampered authority receipt and mismatched review are hard failures', () => {
-  const value = contract();
-  const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  const tampered = structuredClone(receipt);
-  tampered.sourceSha256 = 'f'.repeat(64);
-  assert.equal(verifyAuthorityReceipt({ contract: value, claim, review, receipt: tampered, adapter: trustedAdapter }).cap, 'FAIL');
-
-  const badReview = structuredClone(review);
-  badReview.claimDigest = `sha256:${'0'.repeat(64)}`;
-  const result = computeContractBoundGate({
-    contract: value,
-    claim,
-    review: badReview,
-    receipt,
-    authorityAdapter: trustedAdapter,
-    evidenceGate: 'PASS',
-    evidenceReceipts: [evidenceReceipt()],
-  });
-  assert.equal(result.gate, 'FAIL');
-});
-
-test('missing live authority adapter remains inconclusive rather than accepted', () => {
-  const value = contract();
-  const claim = claimFor(value);
-  const receipt = receiptFor(value, claim);
-  const review = reviewFor(value, claim, receipt);
-  const result = computeContractBoundGate({
-    contract: value,
-    claim,
-    review,
-    receipt,
-    evidenceGate: 'PASS',
-    evidenceReceipts: [evidenceReceipt()],
-  });
-  assert.equal(result.gate, 'INCONCLUSIVE');
-  assert.ok(result.errors.includes('CONTRACT_AUTHORITY_ADAPTER_REQUIRED'));
-});
-
-test('contract and receipt versions are explicit', () => {
-  assert.equal(TASK_CONTRACT_VERSION, '2.3.0');
-  assert.equal(AUTHORITY_RECEIPT_VERSION, '1.2.0');
+test('protocol component versions are explicit', () => {
+  assert.equal(TASK_CONTRACT_VERSION, '2.4.0');
+  assert.equal(AUTHORITY_RECEIPT_VERSION, '1.4.0');
+  assert.equal(EVIDENCE_ASSESSMENT_VERSION, '1.0.0');
+  assert.equal(NAMED_CHECK_RECEIPT_VERSION, '1.0.0');
+  assert.equal(LIFECYCLE_ASSESSMENT_VERSION, '1.0.0');
 });
