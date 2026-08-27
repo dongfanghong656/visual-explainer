@@ -1,9 +1,12 @@
 # Claim ledger
 
-| Claim ID | Statement | Taxonomy | Evidence/status | Boundary |
+| Claim ID | Statement | Taxonomy | Current evidence/status | Boundary |
 |---|---|---|---|---|
-| CLM-0001 | The branch contains a complete declared alpha file set for protocol, validator, Git snapshot, renderer, examples, commands, MCP registration, and governance. | VERIFIED_FACT | EVD-0001, EVD-0002, EVD-0003; readback pending current commit | Does not prove full MCP runtime |
-| CLM-0002 | The core validator/snapshot/renderer and static MCP-integration behavior covered by the 34 controlled Node tests passes. | VERIFIED_FACT | EVD-0001 | Test scope is controlled/local, not host integration |
-| CLM-0003 | The Task Proof pages render in Chromium at 1440 px without horizontal overflow and preserve claim/review color semantics. | VERIFIED_FACT | EVD-0004 | One controlled browser/environment |
-| CLM-0004 | The local MCP works end to end in a clean installation. | EXTERNAL_EVIDENCE_MISSING | RSK-0001 / TASK-0005 | Must not be promoted from syntax checks |
-| CLM-0005 | Version 0.11.0-alpha.1 is released or release-ready. | UNKNOWN | Release gate BLOCKED | No tag, publication, final acceptance, or clean-install E2E |
+| CLM-0001 | The branch contains the declared alpha protocol, engine, renderer, MCP/Skill, tests, and governance files. | FILE_FACT | Repository history and prior readback | Does not prove current semantic correctness |
+| CLM-0002 | The strict pre-contract core passed controlled/adversarial tests on a prior exact baseline. | VERIFIED_PRIOR_BASELINE | Prior Node 20/22 checks | Must be rerun for changed heads |
+| CLM-0003 | Task Proof diagrams can display claim/review distinctions and remaining work. | VERIFIED_PRIOR_BASELINE | Renderer tests | Contract authority overlay pending |
+| CLM-0004 | Public MCP/Skill paths enforce frozen Task Contract 2.4. | NOT_IMPLEMENTED | TASK-0007 | Must not be inferred from isolated module |
+| CLM-0005 | The project is independently accepted, merge-ready, or released. | NOT_VERIFIED | Release gate blocked | No merge, tag, publication, deployment, or independent R2/R3 acceptance |
+| CLM-0006 | Draft PR #3 contains an isolated Task Contract 2.4 candidate with verifier-bound authority/evidence/lifecycle gates. | AUTHOR_DECLARATION_PENDING_CI | Staging files and tests committed | Final exact-head CI/readback pending |
+| CLM-0007 | Claimant-provisional contracts cannot yield final PASS in the isolated core. | AUTHOR_DECLARATION_PENDING_CI | Protocol 2.4 code/tests | Public paths not yet integrated |
+| CLM-0008 | Same-name named checks are content-bound in the isolated contract core. | AUTHOR_DECLARATION_PENDING_CI | Frozen policy and receipt checks | Existing public check path still requires TASK-0007 integration |

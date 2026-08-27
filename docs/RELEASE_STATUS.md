@@ -1,32 +1,26 @@
 # Release status
 
-## REL-0001 — 0.11.0-alpha.1 development candidate
+## REL-0001 — Task Proof development candidate
 
-- Candidate version: `0.11.0-alpha.1`
-- Release state: PROVISIONAL
-- Release decision: BLOCKED
-- Tag/release: none
-- Branch: `chat/task-proof-visualizer/v0.1.0-recovery`
-- Base revision: `df35d97a00191d8aba831e757a65dd6ce0514fc0`
-- Candidate commit: `PENDING_SELF_REFERENCE`
+- Candidate package: `0.11.0-alpha.1`
+- Contract-core candidate: `2.4.0`
+- Release state: `PROVISIONAL`
+- Release decision: `BLOCKED`
+- Tag/release/publication/deployment: none
+- Main integration PR: draft #2
+- Contract-core stacked PR: draft #3
 
-## Included candidate scope
+## Current release blockers
 
-- Task Proof Protocol 1.0 and JSON Schema;
-- author/reviewer examples;
-- executable validator and Git snapshotter;
-- deterministic author/review HTML renderer;
-- five MCP tools, resources, prompts, and two command workflows;
-- skill/README/changelog/package/marketplace updates;
-- controlled tests and project governance.
+1. Draft PR #3 requires exact final-head Node 20/22 CI and readback.
+2. TASK-0007 must make Task Contract enforcement mandatory in every public Author/Reviewer/MCP/Skill path.
+3. Trusted external authority/evidence/lifecycle adapters are incomplete.
+4. A distinct R2/R3 reviewer has not accepted the exact integrated candidate.
+5. Merge, changelog/version, lockfile/install, export, rollback, security, and publication gates remain separate.
 
-## Release blockers
+## Claims explicitly not made
 
-1. The exact repair revision has not yet passed the GitHub Linux Node 20/22 matrix.
-2. A separate reviewer has not accepted a real author claim for the exact candidate commit.
-3. Multi-host compatibility is only partially assessed.
-4. RSK-0003 requires a fix or explicit alpha acceptance decision.
-
-## Promotion requirements
-
-A release/tag requires TASK-0005 completion, exact candidate evidence, no unresolved release blocker, updated changelog/release notes, rollback statement, artifact identity/checksums as applicable, and explicit approval. A draft PR or green local unit tests alone are not release proof.
+- The contract-core staging branch is not merged.
+- Public Task Proof is not yet contract-mandatory.
+- No final independent acceptance exists.
+- No GitHub release, tag, npm/MCP registry publication, production deployment, hardware validation, scientific validation, or user-outcome observation exists.
