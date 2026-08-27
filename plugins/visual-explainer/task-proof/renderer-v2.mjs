@@ -24,8 +24,18 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function xmlSafe(value) {
+  return [...String(value ?? '')].filter((character) => {
+    const code = character.codePointAt(0);
+    return code === 0x9 || code === 0xa || code === 0xd
+      || (code >= 0x20 && code <= 0xd7ff)
+      || (code >= 0xe000 && code <= 0xfffd)
+      || (code >= 0x10000 && code <= 0x10ffff);
+  }).join('');
+}
+
 function xmlEscape(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  return xmlSafe(value).replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;',
   })[character]);
 }
@@ -92,6 +102,7 @@ function statusColor(status) {
     PASS_WITH_LIMITS: COLORS.amber,
     FAIL: COLORS.red,
     INCONCLUSIVE: COLORS.grey,
+    STALE: COLORS.grey,
     UNVERIFIED: COLORS.violet,
     verified: COLORS.green,
     partially_verified: COLORS.amber,
@@ -166,7 +177,7 @@ export function renderTaskProofSvgV2(artifact) {
   }
   const isReview = artifact.kind === REVIEW_KIND;
   const findings = new Map((artifact.findings ?? []).map((finding) => [finding.claimId, finding]));
-  const gate = isReview ? (artifact.gate?.status ?? 'INCONCLUSIVE') : 'UNVERIFIED';
+  const gate = isReview ? (artifact.contractGate?.gate ?? artifact.gate?.status ?? 'INCONCLUSIVE') : 'UNVERIFIED';
   const objective = artifact.task?.objective ?? 'No objective recorded.';
   const thesis = artifact.change?.thesis ?? 'No change thesis recorded.';
   const before = normalizeFlow(artifact.change?.before ?? artifact.change?.oldFailure);
@@ -177,9 +188,23 @@ export function renderTaskProofSvgV2(artifact) {
   const omittedClaims = Math.max(0, (artifact.claims?.length ?? 0) - 4);
   if (omittedClaims > 0) remaining.unshift(`${omittedClaims} additional claim(s) are present in JSON but omitted from this one-screen view.`);
   const digest = artifact.artifactDigest ?? 'digest unavailable';
+  const contractId = artifact.contractRef?.contractId ?? artifact.contractStatus?.contractId ?? null;
+  const contractDigest = artifact.contractRef?.contractDigest ?? artifact.contractStatus?.contractDigest ?? null;
+  const authorityLevel = artifact.contractStatus?.authorityLevel ?? artifact.taskContract?.authority?.level ?? 'unbound';
+  const reviewerLevel = artifact.reviewerAttestation?.level ?? 'not-reviewed';
+  const contractLine = contractId
+    ? `Contract ${contractId} · ${authorityLevel} · ${isReview ? `review ${reviewerLevel}` : (artifact.contractStatus?.finalAcceptancePossible === false ? 'PROVISIONAL — final acceptance impossible' : 'independent review required')}`
+    : 'LEGACY UNBOUND ARTIFACT — no frozen Task Contract';
+  if (contractDigest) evidenceLines.unshift(`${contractLine} · ${compact(contractDigest, 32)}`);
+  else evidenceLines.unshift(contractLine);
+  if (isReview && Array.isArray(artifact.contractGate?.errors) && artifact.contractGate.errors.length) {
+    evidenceLines.push(`Missing/failed gate: ${artifact.contractGate.errors.slice(0, 2).join(', ')}`);
+  }
   const proofBoundary = isReview
-    ? `Gate ${gate} is valid only for claim ${compact(artifact.claimDigest, 36)} and snapshot ${compact(artifact.repository?.snapshotDigest, 36)}.`
-    : 'This is a claimant declaration. A different run must reproduce criterion-level evidence before completion can be verified.';
+    ? `Contract gate ${gate} is valid only for contract ${compact(contractDigest ?? 'unbound', 30)}, claim ${compact(artifact.claimDigest, 30)}, and snapshot ${compact(artifact.repository?.snapshotDigest, 30)}. It does not imply merge or release.`
+    : artifact.contractStatus?.finalAcceptancePossible === false
+      ? 'PROVISIONAL CONTRACT: final acceptance is impossible. This claimant declaration is capped at INCONCLUSIVE.'
+      : 'This is a claimant declaration. A different run must reopen contract authority and reproduce criterion-level evidence.';
   const proofLines = [
     ...bulletLines(evidenceLines, 40, 2),
     ...wrap(proofBoundary, 42, 3),
@@ -194,5 +219,5 @@ export function renderTaskProofSvgV2(artifact) {
     `Remaining: ${remaining.length ? remaining.join('; ') : 'none recorded'}.`,
   ].join(' ');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="task-proof-title task-proof-desc"><title id="task-proof-title">${xmlEscape(artifact.task?.title ?? 'Task Proof')}</title><desc id="task-proof-desc">${xmlEscape(alt)}</desc><rect width="1600" height="900" fill="${COLORS.background}"/><rect x="0" y="0" width="1600" height="92" fill="${COLORS.header}"/><text x="40" y="42" font-size="29" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'TASK PROOF · INDEPENDENT REVIEW' : 'TASK PROOF · CLAIM')}</text><text x="40" y="70" font-size="15" fill="${COLORS.muted}">${xmlEscape(artifact.task?.id ?? artifact.id)} · ${xmlEscape(artifact.repository?.branch ?? 'unknown branch')} · ${xmlEscape((artifact.repository?.headSha ?? '').slice(0, 12))}</text><rect x="1315" y="23" width="245" height="46" rx="23" fill="${statusColor(gate)}"/><text x="1437" y="53" text-anchor="middle" font-size="20" font-weight="850" fill="${COLORS.background}">${xmlEscape(gate)}</text>${panel(40, 116, 430, 146, 'Objective', wrap(objective, 42, 4), COLORS.blue)}${panel(40, 278, 430, 176, 'Change thesis', wrap(thesis, 42, 5), COLORS.violet)}${panel(40, 470, 430, 290, 'Remaining · blocked · risk', bulletLines(remaining, 42, 10), remaining.length ? COLORS.amber : COLORS.green)}<text x="490" y="132" font-size="21" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'Reviewed completion claims' : 'Declared completion claims')}</text>${claimCards(artifact, isReview, findings)}<rect x="1130" y="116" width="430" height="462" rx="16" fill="${COLORS.panelAlt}" stroke="${COLORS.border}" stroke-width="1.5"/><text x="1154" y="151" font-size="21" font-weight="850" fill="${COLORS.text}">Causal change logic</text>${causalSection(1154, 188, 'BEFORE · failure chain', before, COLORS.red)}${causalSection(1154, 322, 'CHANGE · mechanism', [thesis], COLORS.violet)}${causalSection(1154, 456, 'AFTER · resulting behavior', after, COLORS.green)}${panel(1130, 594, 430, 166, 'Evidence and proof boundary', proofLines, statusColor(gate))}<rect x="40" y="790" width="1520" height="72" rx="14" fill="${COLORS.header}"/><text x="64" y="818" font-size="14" fill="${COLORS.muted}">Artifact digest</text><text x="64" y="844" font-size="16" font-family="monospace" fill="${COLORS.text}">${xmlEscape(digest)}</text><text x="1534" y="821" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(`${artifact.claims?.length ?? 0} claim(s) · ${evidence.length} evidence item(s)`)}</text><text x="1534" y="846" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(isReview ? 'JSON + receipts are the fact source.' : 'Claimant output is never self-verifying.')}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="task-proof-title task-proof-desc"><title id="task-proof-title">${xmlEscape(artifact.task?.title ?? 'Task Proof')}</title><desc id="task-proof-desc">${xmlEscape(alt)}</desc><rect width="1600" height="900" fill="${COLORS.background}"/><rect x="0" y="0" width="1600" height="92" fill="${COLORS.header}"/><text x="40" y="42" font-size="29" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'TASK PROOF · INDEPENDENT REVIEW' : 'TASK PROOF · CLAIM')}</text><text x="40" y="70" font-size="15" fill="${COLORS.muted}">${xmlEscape(compact(`${artifact.task?.id ?? artifact.id} · ${artifact.repository?.branch ?? 'unknown branch'} · ${(artifact.repository?.headSha ?? '').slice(0, 12)} · ${contractLine}`, 150))}</text><rect x="1315" y="23" width="245" height="46" rx="23" fill="${statusColor(gate)}"/><text x="1437" y="53" text-anchor="middle" font-size="20" font-weight="850" fill="${COLORS.background}">${xmlEscape(gate)}</text>${panel(40, 116, 430, 146, 'Objective', wrap(objective, 42, 4), COLORS.blue)}${panel(40, 278, 430, 176, 'Change thesis', wrap(thesis, 42, 5), COLORS.violet)}${panel(40, 470, 430, 290, 'Remaining · blocked · risk', bulletLines(remaining, 42, 10), remaining.length ? COLORS.amber : COLORS.green)}<text x="490" y="132" font-size="21" font-weight="850" fill="${COLORS.text}">${xmlEscape(isReview ? 'Reviewed completion claims' : 'Declared completion claims')}</text>${claimCards(artifact, isReview, findings)}<rect x="1130" y="116" width="430" height="462" rx="16" fill="${COLORS.panelAlt}" stroke="${COLORS.border}" stroke-width="1.5"/><text x="1154" y="151" font-size="21" font-weight="850" fill="${COLORS.text}">Causal change logic</text>${causalSection(1154, 188, 'BEFORE · failure chain', before, COLORS.red)}${causalSection(1154, 322, 'CHANGE · mechanism', [thesis], COLORS.violet)}${causalSection(1154, 456, 'AFTER · resulting behavior', after, COLORS.green)}${panel(1130, 594, 430, 166, 'Evidence and proof boundary', proofLines, statusColor(gate))}<rect x="40" y="790" width="1520" height="72" rx="14" fill="${COLORS.header}"/><text x="64" y="818" font-size="14" fill="${COLORS.muted}">Artifact digest</text><text x="64" y="844" font-size="16" font-family="monospace" fill="${COLORS.text}">${xmlEscape(digest)}</text><text x="1534" y="821" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(`${artifact.claims?.length ?? 0} claim(s) · ${evidence.length} evidence item(s)`)}</text><text x="1534" y="846" text-anchor="end" font-size="14" fill="${COLORS.muted}">${xmlEscape(isReview ? 'Contract + Claim + Review + receipts are the fact source.' : 'Claimant output is never self-verifying.')}</text></svg>`;
 }
