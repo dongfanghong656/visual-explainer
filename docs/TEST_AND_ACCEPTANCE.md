@@ -19,6 +19,7 @@
 | EVD-0013 | Locked clean package installation and packed MCP handshake | PASS_LOCAL | `npm run test:release-package`; Windows Node 22 | 97 package files; all 8 tools; temporary clean install; not public-download evidence |
 | EVD-0014 | Default production dependency advisory gate | PASS_LOCAL | `npm audit --omit=dev --omit=peer --audit-level=high` | 0 vulnerabilities; optional Pi/PPTX peers excluded from default deployment |
 | EVD-0015 | PR #4 release-delta CI and R2 failure at `93a2704` | PARTIAL | GitHub Actions run `33075935293` | Node 20/22 passed; R2 ran 106 Linux tests and MCP handshake, then rejected PR ref `4/merge` as a tag; repair is local pending exact-head rerun |
+| EVD-0016 | PR #4 repaired exact-head matrix and R2 review at `f1f665dc9e077988982401cae849c0abfdfcb25e` | PASS_WITH_LIMITS | GitHub Actions run `33077129005` | Node 20/22 and R2 passed; R2 reconstructed 7 requirements, ran 106 Linux tests, eight-tool handshakes, package install, and 0-vulnerability audit; not a different human/model |
 
 ## Contract-authority acceptance matrix
 
@@ -33,9 +34,9 @@
 | Evidence/lifecycle verifier binding | TESTED | Context-free verifier rejection included |
 | Strict final orchestrator | TESTED | Extra receipt/context-free verifier cases included |
 | Public MCP/Skill enforcement | EXACT_HEAD_CI_VERIFIED | Contract-free/mismatched inputs, trusted registry, and default-deny tests pass on Node 20/22 |
-| Independent acceptance | NOT_ASSESSED | Different reviewer context/model/human/CI as required |
-| Release readiness | BLOCKED | Merge/release/publication/deployment gates are separate |
+| Independent acceptance | R2_PASS_WITH_LIMITS_CI | Automated exact-head CI isolation passes; no different-human/model R3 review |
+| Release readiness | CI_REVIEW_PASS_PENDING_INTEGRATION | Merge/release/publication/deployment gates are separate |
 
 ## Current conclusion
 
-Task Contract Protocol 2.4 and Public Enforcement 1.0 passed the release-delta exact-head Node 20/22 matrix. The default locked package installs in a clean temporary prefix, exposes the eight-tool MCP contract, and passes the production dependency advisory gate with optional host peers omitted. The first distinct R2 run found a PR-ref/release-tag bug after its test and MCP checks; the local repair requires a remote rerun. `main` integration, tag workflow, public GitHub prerelease, and downloaded-artifact readback remain pending.
+Task Contract Protocol 2.4 and Public Enforcement 1.0 passed the repaired exact-head Node 20/22 matrix and automated R2 review with documented limitations. The default locked package installs in a clean temporary prefix, exposes the eight-tool MCP contract, and passes the production dependency advisory gate with optional host peers omitted. `main` integration, tag workflow, public GitHub prerelease, and downloaded-artifact readback remain pending.

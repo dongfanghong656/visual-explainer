@@ -8,8 +8,8 @@
 | Clean packed-artifact install | PASS_LOCAL |
 | Packed eight-tool MCP handshake | PASS_LOCAL |
 | Default production dependency audit | PASS_LOCAL, 0 vulnerabilities |
-| Release-delta exact-head CI | Node 20/22 PASS at `93a2704` |
-| Distinct R2 review | FAILED at `93a2704`: PR ref `4/merge` was misclassified as a release tag; repair PASS_LOCAL, remote rerun pending |
+| Release-delta exact-head CI | Node 20/22 PASS at `f1f665d` |
+| Distinct R2 review | PASS_WITH_LIMITS at `f1f665d`, GitHub Actions run `33077129005` |
 | Main integration | PENDING |
 | GitHub prerelease | PENDING |
 | Downloaded artifact and Codex readback | PENDING |

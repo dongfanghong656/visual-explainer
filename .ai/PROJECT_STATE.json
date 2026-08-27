@@ -29,7 +29,7 @@
   "phase": "ALPHA_RELEASE_CANDIDATE",
   "milestone": "Verified GitHub prerelease artifact and installed Codex deployment",
   "sync": {
-    "status": "NODE_MATRIX_PASS_R2_FAILURE_REPAIRED_LOCAL_PENDING_RERUN",
+    "status": "EXACT_HEAD_NODE_MATRIX_R2_PASS_WITH_LIMITS_PENDING_MERGE",
     "baseRevision": "2a6dab262f49c7d4c0abf6d5f78a38825761022f",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
     "latestTurn": "TURN-0005",
@@ -41,7 +41,7 @@
     "spec": 5,
     "task": 8,
     "artifact": 8,
-    "evidence": 16,
+    "evidence": 17,
     "decision": 11,
     "risk": 12,
     "checkpoint": 6,
@@ -57,10 +57,10 @@
     "releases": ["REL-0001"]
   },
   "gates": {
-    "developmentAcceptance": "EXACT_HEAD_NODE_MATRIX_PASS_R2_REPAIR_LOCAL_PASS_PENDING_RERUN",
-    "release": "USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG",
-    "reason": "The release delta passed exact-head Node 20/22 CI. The R2 job found a PR-ref/release-tag classification bug after passing its tests and MCP handshake; the repair passes locally but still needs an exact-head rerun, main integration, GitHub publication, and downloaded-install readback."
+    "developmentAcceptance": "EXACT_HEAD_NODE_MATRIX_AND_R2_PASS_WITH_LIMITS",
+    "release": "USER_AUTHORIZED_R2_PASS_WITH_LIMITS_PENDING_MERGE_TAG",
+    "reason": "The repaired release delta passed exact-head Node 20/22 CI and automated R2 review with documented independence and external-adapter limitations. Main integration, GitHub publication, and downloaded-install readback remain."
   },
-  "blockers": ["R2_REPAIR_REMOTE_RERUN", "INDEPENDENT_R2_R3_REVIEW", "MAIN_INTEGRATION", "RELEASE_TAG_AND_PUBLICATION", "DOWNLOADED_INSTALL_READBACK"],
-  "nextAction": "Push the PR-ref/release-tag repair, require exact-head Node 20/22 and R2 success, merge PR #4, tag v0.11.0-alpha.1, publish the GitHub prerelease, install its public asset, and register the Skill/MCP in Codex."
+  "blockers": ["MAIN_INTEGRATION", "RELEASE_TAG_AND_PUBLICATION", "DOWNLOADED_INSTALL_READBACK"],
+  "nextAction": "Push the R2 evidence update, require exact-head Node 20/22 and R2 success, merge PR #4, tag v0.11.0-alpha.1, publish the GitHub prerelease, install its public asset, and register the Skill/MCP in Codex."
 }
