@@ -4,21 +4,25 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import { pathToFileURL } from 'node:url';
 import {
-  CLAIM_KIND,
   PROTOCOL_VERSION,
   TaskProofError,
   sha256,
-  validateClaim,
 } from './core.mjs';
 import { writeTaskProofArtifactsStrict as writeTaskProofArtifacts } from './artifact-store.mjs';
 import {
   finalizeReviewStrict,
   mergeReviewEvidence,
   probeRepositoryEvidenceStrict,
-  validateClaimEvidencePolicy,
 } from './hardening.mjs';
 import { runNamedChecksStrict } from './named-checks.mjs';
 import { createRepositorySnapshotStrict as createRepositorySnapshot } from './snapshot.mjs';
+import {
+  bindPublicClaimToContract,
+  createPublicRepositoryAuthorityReceipt,
+  finalizePublicContractReview,
+  validatePublicContractBoundClaim,
+  validatePublicTaskContract,
+} from './contract-public-enforcement.mjs';
 
 const OPEN_OBJECT = z.record(z.string(), z.unknown());
 const UNIQUE_STRING_ARRAY = z.array(z.string()).refine(
@@ -45,6 +49,14 @@ const REVIEWER_INPUT = z.object({
   role: z.literal('reviewer'),
   agent: z.string().optional(),
   model: z.string().optional(),
+}).strict();
+const REVIEWER_ATTESTATION_INPUT = z.object({
+  level: z.enum(['R0', 'R1', 'R2', 'R3']),
+  method: z.literal('procedural_attestation'),
+  sessionId: z.string(),
+  reconstructedBeforeReadingClaim: z.boolean(),
+  independentEvidenceCollected: z.boolean(),
+  adversarialEvidenceCollected: z.boolean(),
 }).strict();
 const FINDING_INPUT = z.object({
   claimId: z.string(),
@@ -86,10 +98,28 @@ const TOOL_SPECS = Object.freeze([
     }).strict(),
   },
   {
+    name: 'task_proof_validate_contract',
+    title: 'Task Proof Validate Contract',
+    description: 'Validate and normalize a frozen Task Contract, returning its deterministic digest, authority declaration digest, coverage cap, and required reviewer level. Validation does not authenticate an external authority source.',
+    inputSchema: z.object({ contract: OPEN_OBJECT }).strict(),
+  },
+  {
+    name: 'task_proof_contract_source_receipt',
+    title: 'Task Proof Contract Source Receipt',
+    description: 'Reopen a repository_file contract source at immutable Git revisions and issue a reviewer-bound authority receipt. The built-in adapter supports repository_source contracts only; other authority types remain unavailable and cannot be promoted.',
+    inputSchema: z.object({
+      repositoryPath: z.string().optional(),
+      contract: OPEN_OBJECT,
+      claim: OPEN_OBJECT,
+      reviewerRunId: z.string(),
+      sourceId: z.string(),
+    }).strict(),
+  },
+  {
     name: 'task_proof_validate_claim',
     title: 'Task Proof Validate Claim',
     description: 'Validate and digest a claimant artifact without writing files or granting a completion verdict.',
-    inputSchema: z.object({ claim: OPEN_OBJECT }).strict(),
+    inputSchema: z.object({ contract: OPEN_OBJECT, claim: OPEN_OBJECT }).strict(),
   },
   {
     name: 'task_proof_claim',
@@ -97,8 +127,8 @@ const TOOL_SPECS = Object.freeze([
     description: 'Bind a claimant model to current Git state, validate it, and render an explicitly UNVERIFIED immutable artifact set.',
     inputSchema: z.object({
       repositoryPath: z.string().optional(),
-      baseRef: z.string().optional(),
       basename: z.string().optional(),
+      contract: OPEN_OBJECT,
       claim: OPEN_OBJECT,
     }).strict(),
   },
@@ -109,8 +139,11 @@ const TOOL_SPECS = Object.freeze([
     inputSchema: z.object({
       repositoryPath: z.string().optional(),
       basename: z.string().optional(),
+      contract: OPEN_OBJECT,
       claim: OPEN_OBJECT,
       reviewer: REVIEWER_INPUT,
+      reviewerAttestation: REVIEWER_ATTESTATION_INPUT,
+      authorityReceipts: z.array(OPEN_OBJECT).max(32),
       findings: z.array(FINDING_INPUT),
       probes: z.array(PROBE_INPUT).max(100).optional(),
       checks: z.array(CHECK_INPUT).max(20).optional(),
@@ -147,17 +180,6 @@ function semanticDigest(value) {
   return sha256(copy);
 }
 
-function validateClaimModel(claim) {
-  const structural = validateClaim(claim);
-  const policy = validateClaimEvidencePolicy(claim);
-  return {
-    ok: structural.ok && policy.ok,
-    errors: [...structural.errors, ...policy.errors],
-    warnings: structural.warnings,
-    digest: structural.ok && policy.ok ? structural.digest : undefined,
-  };
-}
-
 function assertNoSnapshotRace(reference, fresh) {
   if (reference.snapshotDigest !== fresh.snapshotDigest) {
     throw new TaskProofError('SNAPSHOT_RACE', 'Repository changed after evidence collection. Restart the review.', {
@@ -175,19 +197,6 @@ function assertSnapshotComparable(snapshot) {
       { reasons: snapshot.repository.workingTreeFingerprintIncompleteReasons ?? [] },
     );
   }
-}
-
-function repositoryBinding(snapshot) {
-  return {
-    branch: snapshot.repository.branch,
-    baseSha: snapshot.repository.baseSha,
-    headSha: snapshot.repository.headSha,
-    dirty: snapshot.repository.dirty,
-    snapshotDigest: snapshot.snapshotDigest,
-    workingTreeFingerprintComplete: snapshot.repository.workingTreeFingerprintComplete,
-    workingTreeFingerprintIncompleteReasons: snapshot.repository.workingTreeFingerprintIncompleteReasons,
-    workingTreeHashedBytes: snapshot.repository.workingTreeHashedBytes,
-  };
 }
 
 export async function handleTaskProofTool(name, rawArguments = {}) {
@@ -208,21 +217,39 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
         repositoryPath, reviewerRunId: args.reviewerRunId, requests: args.requests, baseRef: args.baseRef,
       });
 
+    case 'task_proof_validate_contract':
+      return validatePublicTaskContract(asObject(args.contract, 'contract'));
+
+    case 'task_proof_contract_source_receipt':
+      return createPublicRepositoryAuthorityReceipt({
+        repositoryPath,
+        contract: asObject(args.contract, 'contract'),
+        claim: asObject(args.claim, 'claim'),
+        reviewerRunId: args.reviewerRunId,
+        sourceId: args.sourceId,
+        observedAt: new Date().toISOString(),
+      });
+
     case 'task_proof_validate_claim':
-      return validateClaimModel(asObject(args.claim, 'claim'));
+      return validatePublicContractBoundClaim({
+        contract: asObject(args.contract, 'contract'),
+        claim: asObject(args.claim, 'claim'),
+      });
 
     case 'task_proof_claim': {
+      const contractValidation = validatePublicTaskContract(asObject(args.contract, 'contract'));
       const original = asObject(args.claim, 'claim');
-      const snapshot = createRepositorySnapshot({ repositoryPath, baseRef: args.baseRef });
-      const claim = {
-        ...original,
-        protocolVersion: PROTOCOL_VERSION,
-        kind: CLAIM_KIND,
-        generatedAt: original.generatedAt ?? new Date().toISOString(),
-        repository: repositoryBinding(snapshot),
-      };
-      const validation = validateClaimModel(claim);
-      if (!validation.ok) throw new TaskProofError('INVALID_CLAIM', 'Claim validation failed.', validation);
+      const snapshot = createRepositorySnapshot({
+        repositoryPath,
+        baseRef: contractValidation.contract.scope.baseRevision,
+      });
+      const bound = bindPublicClaimToContract({
+        contract: contractValidation.contract,
+        rawClaim: original,
+        snapshot,
+      });
+      const claim = bound.claim;
+      const validation = bound.validation;
       claim.artifactDigest = validation.digest;
       const files = writeTaskProofArtifacts({
         artifact: claim, repositoryPath, basename: args.basename ?? `${claim.task.id}-claim`,
@@ -230,21 +257,29 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       return {
         status: 'UNVERIFIED',
         snapshotComparable: snapshot.repository.workingTreeFingerprintComplete,
-        rule: 'Claimant output is never proof of completion. Only task_proof_review may compute a gate.',
+        contractStatus: claim.contractStatus,
+        rule: claim.contractStatus.finalAcceptancePossible
+          ? 'Claimant output is never proof of completion. A different reviewer run must reopen contract authority and use task_proof_review.'
+          : 'PROVISIONAL CONTRACT: final acceptance is impossible; the maximum result is INCONCLUSIVE.',
         claim,
         files,
       };
     }
 
     case 'task_proof_review': {
+      const contractValidation = validatePublicTaskContract(asObject(args.contract, 'contract'));
+      const contract = contractValidation.contract;
       const claim = asObject(args.claim, 'claim');
-      const claimValidation = validateClaimModel(claim);
-      if (!claimValidation.ok) throw new TaskProofError('INVALID_CLAIM', 'Review input claim validation failed.', claimValidation);
+      const claimValidation = validatePublicContractBoundClaim({ contract, claim });
+      if (!claimValidation.ok) throw new TaskProofError('INVALID_CLAIM', 'Review input Claim is not bound to the supplied frozen Task Contract.', claimValidation);
       const reviewer = asObject(args.reviewer, 'reviewer');
       if (reviewer.runId === claim.producer?.runId) {
         throw new TaskProofError('NOT_INDEPENDENT', 'reviewer.runId must differ from claim.producer.runId.');
       }
-      const baseRef = claim.repository?.baseSha;
+      if (args.reviewerAttestation?.sessionId !== reviewer.runId) {
+        throw new TaskProofError('REVIEWER_ATTESTATION_BINDING', 'reviewerAttestation.sessionId must equal reviewer.runId.');
+      }
+      const baseRef = contract.scope.baseRevision;
       const collections = [];
       if (Array.isArray(args.probes) && args.probes.length > 0) {
         collections.push(probeRepositoryEvidenceStrict({
@@ -262,19 +297,35 @@ export async function handleTaskProofTool(name, rawArguments = {}) {
       const finalSnapshot = createRepositorySnapshot({ repositoryPath, baseRef });
       assertSnapshotComparable(finalSnapshot);
       assertNoSnapshotRace(snapshot, finalSnapshot);
-      const review = finalizeReviewStrict({
+      const legacyReview = finalizeReviewStrict({
         claim, reviewer, snapshot,
         findings: Array.isArray(args.findings) ? args.findings : [],
         reviewEvidence: collected.evidence,
       });
-      review.repository.workingTreeFingerprintComplete = snapshot.repository.workingTreeFingerprintComplete;
-      review.repository.workingTreeFingerprintIncompleteReasons = snapshot.repository.workingTreeFingerprintIncompleteReasons;
-      review.repository.workingTreeHashedBytes = snapshot.repository.workingTreeHashedBytes;
+      legacyReview.repository.workingTreeFingerprintComplete = snapshot.repository.workingTreeFingerprintComplete;
+      legacyReview.repository.workingTreeFingerprintIncompleteReasons = snapshot.repository.workingTreeFingerprintIncompleteReasons;
+      legacyReview.repository.workingTreeHashedBytes = snapshot.repository.workingTreeHashedBytes;
+      const finalized = finalizePublicContractReview({
+        repositoryPath,
+        contract,
+        claim,
+        legacyReview,
+        reviewerAttestation: args.reviewerAttestation,
+        authorityReceipts: args.authorityReceipts,
+        snapshot,
+      });
+      const review = finalized.review;
       review.artifactDigest = semanticDigest(review);
       const files = writeTaskProofArtifacts({
         artifact: review, repositoryPath, basename: args.basename ?? `${claim.task.id}-review`,
       });
-      return { gate: review.gate, review, files };
+      return {
+        gate: finalized.gate,
+        legacyGate: review.gate,
+        review,
+        files,
+        rule: 'contractGate is authoritative for task acceptance. legacyGate is retained only as the criterion-level evidence assessment and never authorizes merge, release, publication, deployment, hardware acceptance, user acceptance, or real-world effectiveness.',
+      };
     }
 
     default:
@@ -292,7 +343,7 @@ export function createTaskProofServer() {
   const server = new McpServer(
     { name: 'visual-explainer-task-proof', version: PROTOCOL_VERSION },
     {
-      instructions: 'Claimant output is always UNVERIFIED. Only an independent task_proof_review may compute a completion gate. Named checks require explicit operator opt-in.',
+      instructions: 'Claimant output is always UNVERIFIED. Public claim/review paths require a frozen Task Contract. Only contractGate from an independent task_proof_review is authoritative for task acceptance; legacyGate is evidence-only. Named checks require explicit operator opt-in.',
     },
   );
 
