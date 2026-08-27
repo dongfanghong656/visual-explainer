@@ -16,7 +16,7 @@
 | EVD-0010 | Trusted adapter registry and default-deny MCP tests | PASS_LOCAL | Registry, MCP, public-finalizer focused tests | Server-owned factories and unclassified-tool rejection covered |
 | EVD-0011 | Installed MCP and package deployment checks | PASS_LOCAL | Real checkout stdio handshake, npm-linked binary handshake, `npm pack --dry-run` | 8 tools callable; 94 package entries; not publication |
 | EVD-0012 | PR #4 exact-head Linux matrix at `2a6dab262f49c7d4c0abf6d5f78a38825761022f` | PASS | GitHub Actions Node 20 and Node 22 | Both jobs ran strict source/tests and real stdio handshake; release-hardening delta needs a new run |
-| EVD-0013 | Locked clean package installation and packed MCP handshake | PASS_LOCAL | `npm run test:release-package`; Windows Node 22 | 96 package files; all 8 tools; temporary clean install; not public-download evidence |
+| EVD-0013 | Locked clean package installation and packed MCP handshake | PASS_LOCAL | `npm run test:release-package`; Windows Node 22 | 97 package files; all 8 tools; temporary clean install; not public-download evidence |
 | EVD-0014 | Default production dependency advisory gate | PASS_LOCAL | `npm audit --omit=dev --omit=peer --audit-level=high` | 0 vulnerabilities; optional Pi/PPTX peers excluded from default deployment |
 
 ## Contract-authority acceptance matrix

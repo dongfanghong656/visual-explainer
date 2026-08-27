@@ -42,7 +42,7 @@
     "task": 8,
     "artifact": 8,
     "evidence": 15,
-    "decision": 10,
+    "decision": 11,
     "risk": 12,
     "checkpoint": 6,
     "turn": 6,
@@ -59,7 +59,7 @@
   "gates": {
     "developmentAcceptance": "EXACT_HEAD_CI_PASS_RELEASE_DELTA_LOCAL_PASS",
     "release": "USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG",
-    "reason": "The integrated path passed exact-head CI and the locked artifact gate passes locally; the release delta still needs remote CI, distinct review, main integration, GitHub publication, and downloaded-install readback."
+    "reason": "The integrated path passed exact-head CI and the locked artifact gate passes locally; an exact-head R2 CI reviewer is implemented, but its commit still needs remote execution, main integration, GitHub publication, and downloaded-install readback."
   },
   "blockers": ["RELEASE_DELTA_REMOTE_CI", "INDEPENDENT_R2_R3_REVIEW", "MAIN_INTEGRATION", "RELEASE_TAG_AND_PUBLICATION", "DOWNLOADED_INSTALL_READBACK"],
   "nextAction": "Push TURN-0005, require exact-head Node 20/22 CI, retarget PR #4 to main, obtain distinct review, merge, tag v0.11.0-alpha.1, publish the GitHub prerelease, install its public asset, and register the Skill/MCP in Codex."

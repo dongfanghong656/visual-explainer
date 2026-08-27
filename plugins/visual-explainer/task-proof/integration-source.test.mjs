@@ -66,8 +66,21 @@ test('CI runs the strict test finder and a real MCP stdio handshake', () => {
   assert.match(workflow, /run-all-tests-strict\.mjs/);
   assert.match(workflow, /mcp-handshake\.mjs/);
   assert.match(workflow, /npm ci --ignore-scripts/);
+  assert.match(workflow, /ref:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
   assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
+});
+
+test('CI records a distinct exact-head R2 release review after the matrix passes', () => {
+  const workflow = read('.github/workflows/task-proof.yml');
+  const reviewer = read('plugins/visual-explainer/task-proof/release-review-report.mjs');
+  assert.match(workflow, /independent-release-review:/);
+  assert.match(workflow, /needs: verify/);
+  assert.match(workflow, /TASK_PROOF_REVIEWED_SHA/);
+  assert.match(workflow, /release-review-report\.mjs/);
+  assert.match(reviewer, /procedureLevel:\s*['"]R2['"]/);
+  assert.match(reviewer, /verdict:\s*['"]PASS_WITH_LIMITS['"]/);
+  assert.match(reviewer, /git[\s\S]*rev-parse[\s\S]*HEAD/);
 });
 
 test('protocol documents state the core trust boundaries', () => {

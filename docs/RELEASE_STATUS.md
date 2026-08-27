@@ -18,7 +18,7 @@
 ## Current release blockers
 
 1. The release-hardening delta requires exact-head Node 20/22 CI after push.
-2. A distinct R2/R3 reviewer has not accepted the exact integrated candidate.
+2. The exact-head `Independent R2 release review` CI check must pass and retain its stated automated-review limitations.
 3. PR #4 must integrate the full stack into `main` before tagging.
 4. The GitHub prerelease asset must be installed from its public URL and rechecked before deployment is claimed.
 
@@ -32,6 +32,6 @@
 ## Release procedure
 
 1. Push the reviewed release-hardening commit and require Node 20/22 success for its exact PR #4 HEAD.
-2. Retarget PR #4 to `main`, mark it ready, obtain and reconcile a distinct review, then merge without rewriting the branch history.
+2. Retarget PR #4 to `main`, mark it ready, require the distinct exact-head R2 CI review, reconcile any failure, then merge without rewriting the branch history.
 3. Tag the merged release commit `v0.11.0-alpha.1`; the tag workflow must pass `verify:release` and the default production dependency audit before creating a GitHub prerelease.
 4. Download and install the public `.tgz` asset, run the eight-tool MCP handshake, install the versioned Skill, register the MCP server in Codex, and record the readback.

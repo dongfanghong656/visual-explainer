@@ -55,3 +55,10 @@
 - Date: 2026-08-27
 - Decision: publish `0.11.0-alpha.1` as a GitHub prerelease artifact after exact-head CI, distinct review, and a clean packed-install handshake. Do not publish under the upstream-owned unscoped npm name.
 - Consequence: the tag workflow installs the lockfile with lifecycle scripts and optional peers disabled, verifies source/tests/MCP/packed installation, audits the default dependency set, and only then creates the prerelease. Pi and PPTX libraries remain optional operator-installed peers.
+
+## DEC-0010 — Use a separate exact-head CI job for the alpha R2 evidence lane
+
+- Status: ACCEPTED
+- Date: 2026-08-27
+- Decision: after both Node matrix jobs pass, a separate GitHub Actions job checks out the literal PR head, reconstructs every accepted repository requirement, reruns the locked release gate and audit, and emits an R2 `PASS_WITH_LIMITS` review record.
+- Consequence: this supplies a distinct deterministic reviewer run without claiming a different human/model or universal omission detection. The check must pass for the exact merge candidate, and its stated limitations remain release-visible.
