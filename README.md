@@ -90,6 +90,12 @@ curl -fsSL https://raw.githubusercontent.com/nicobailon/visual-explainer/main/in
 
 **MCP:**
 
+The Task Proof fork is distributed as a GitHub prerelease because the unscoped npm package name belongs to the upstream project. Install the immutable release artifact globally:
+
+```bash
+npm install --global --ignore-scripts --omit=peer https://github.com/dongfanghong656/visual-explainer/releases/download/v0.11.0-alpha.1/visual-explainer-0.11.0-alpha.1.tgz
+```
+
 Use `visual-explainer-mcp` from a package install, or run `npm install --no-package-lock` before pointing your host at `plugins/visual-explainer/mcp/server.mjs` from a checkout. Some hosts need an absolute path to the binary. The MCP server is local stdio only. It does not call an LLM, start an HTTP listener, handle credentials, or write outside `~/.agent/diagrams/`.
 
 Example package configuration:
@@ -159,7 +165,7 @@ Launch `agy` in the project and use `/skills` to confirm `visual-explainer` is d
 
 **Codex CLI:**
 ```bash
-git clone --depth 1 https://github.com/nicobailon/visual-explainer.git /tmp/visual-explainer
+git clone --branch v0.11.0-alpha.1 --depth 1 https://github.com/dongfanghong656/visual-explainer.git /tmp/visual-explainer
 
 mkdir -p ~/.codex/skills ~/.codex/prompts
 cp -R /tmp/visual-explainer/plugins/visual-explainer ~/.codex/skills/visual-explainer
@@ -171,6 +177,13 @@ rm -rf /tmp/visual-explainer
 ```
 
 Invoke with `$visual-explainer` or ask Codex to use the `visual-explainer` skill. If prompts are installed and supported, use `/prompts:diff-review`, `/prompts:plan-review`, etc.
+
+Register the installed Task Proof MCP server with Codex and confirm that it is enabled:
+
+```bash
+codex mcp add visual-explainer-task-proof -- visual-explainer-task-proof-mcp
+codex mcp list
+```
 
 **OpenCode/opencode:**
 ```bash

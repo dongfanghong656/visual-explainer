@@ -23,16 +23,17 @@
     "release": "docs/RELEASE_STATUS.md",
     "handoff": "docs/HANDOFF.md",
     "contractAuthority": "docs/task-proof/TURN-0003_CONTRACT_AUTHORITY_STATUS.md",
-    "publicEnforcement": "docs/task-proof/TURN-0004_PUBLIC_ENFORCEMENT_STATUS.md"
+    "publicEnforcement": "docs/task-proof/TURN-0004_PUBLIC_ENFORCEMENT_STATUS.md",
+    "releaseCandidate": "docs/task-proof/TURN-0005_RELEASE_CANDIDATE_STATUS.md"
   },
-  "phase": "ALPHA_PUBLIC_CONTRACT_ENFORCEMENT_STAGING",
-  "milestone": "Public Enforcement 1.0 with trusted server adapters and default-deny MCP registration",
+  "phase": "ALPHA_RELEASE_CANDIDATE",
+  "milestone": "Verified GitHub prerelease artifact and installed Codex deployment",
   "sync": {
-    "status": "LOCAL_VERIFIED_PENDING_COMMIT_AND_REMOTE_CI",
-    "baseRevision": "598006bc322cb7cb220085c63f46a71a263f4636",
+    "status": "LOCAL_RELEASE_GATE_PASS_PENDING_COMMIT_REMOTE_CI_REVIEW",
+    "baseRevision": "2a6dab262f49c7d4c0abf6d5f78a38825761022f",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
-    "latestTurn": "TURN-0004",
-    "latestCheckpoint": "CHK-0004",
+    "latestTurn": "TURN-0005",
+    "latestCheckpoint": "CHK-0005",
     "pendingSelfReference": true
   },
   "counters": {
@@ -40,26 +41,26 @@
     "spec": 5,
     "task": 8,
     "artifact": 8,
-    "evidence": 12,
-    "decision": 9,
-    "risk": 11,
-    "checkpoint": 5,
-    "turn": 5,
+    "evidence": 15,
+    "decision": 10,
+    "risk": 12,
+    "checkpoint": 6,
+    "turn": 6,
     "release": 2
   },
   "active": {
     "requirements": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0007"],
     "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003", "SPEC-0004"],
-    "tasks": ["TASK-0005", "TASK-0007"],
-    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006", "ART-0007"],
-    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0006", "RSK-0007", "RSK-0010"],
+    "tasks": ["TASK-0005"],
+    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006", "ART-0007", "ART-0008"],
+    "risks": ["RSK-0001", "RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0007", "RSK-0010", "RSK-0011"],
     "releases": ["REL-0001"]
   },
   "gates": {
-    "developmentAcceptance": "PENDING_REMOTE_CI_AND_INDEPENDENT_REVIEW",
-    "release": "BLOCKED",
-    "reason": "The integrated public path passes local tests and linked deployment, but exact final-head Node 20/22 CI and a distinct R2/R3 review remain incomplete."
+    "developmentAcceptance": "EXACT_HEAD_CI_PASS_RELEASE_DELTA_LOCAL_PASS",
+    "release": "USER_AUTHORIZED_PENDING_REVIEW_MERGE_TAG",
+    "reason": "The integrated path passed exact-head CI and the locked artifact gate passes locally; the release delta still needs remote CI, distinct review, main integration, GitHub publication, and downloaded-install readback."
   },
-  "blockers": ["RSK-0005", "RSK-0007", "RSK-0010", "INDEPENDENT_R2_R3_REVIEW"],
-  "nextAction": "Push the reviewed TURN-0004 commit, require Node 20/22 success for that exact PR #4 HEAD, then run a distinct R2/R3 review without merging or publishing."
+  "blockers": ["RELEASE_DELTA_REMOTE_CI", "INDEPENDENT_R2_R3_REVIEW", "MAIN_INTEGRATION", "RELEASE_TAG_AND_PUBLICATION", "DOWNLOADED_INSTALL_READBACK"],
+  "nextAction": "Push TURN-0005, require exact-head Node 20/22 CI, retarget PR #4 to main, obtain distinct review, merge, tag v0.11.0-alpha.1, publish the GitHub prerelease, install its public asset, and register the Skill/MCP in Codex."
 }

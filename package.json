@@ -57,11 +57,19 @@
     "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "node-html-parser": "^9.0.1",
-    "pptxgenjs": "^4.0.1",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
+    "@earendil-works/pi-coding-agent": "*",
+    "pptxgenjs": "^4.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "pptxgenjs": {
+      "optional": true
+    }
   },
   "pi": {
     "extensions": [
@@ -79,7 +87,9 @@
     "check:task-proof": "node plugins/visual-explainer/task-proof/verify-source.mjs",
     "test:task-proof": "node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs",
     "test:task-proof:mcp": "node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs",
-    "verify:task-proof": "npm run check:task-proof && npm run test:task-proof && npm run test:task-proof:mcp"
+    "test:release-package": "node plugins/visual-explainer/task-proof/release-package-smoke.mjs",
+    "verify:task-proof": "npm run check:task-proof && npm run test:task-proof && npm run test:task-proof:mcp",
+    "verify:release": "npm run verify:task-proof && npm run test:release-package"
   },
   "engines": {
     "node": ">=20"

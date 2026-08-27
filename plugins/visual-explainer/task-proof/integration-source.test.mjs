@@ -65,7 +65,7 @@ test('CI runs the strict test finder and a real MCP stdio handshake', () => {
   const workflow = read('.github/workflows/task-proof.yml');
   assert.match(workflow, /run-all-tests-strict\.mjs/);
   assert.match(workflow, /mcp-handshake\.mjs/);
-  assert.match(workflow, /npm install --ignore-scripts/);
+  assert.match(workflow, /npm ci --ignore-scripts/);
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
   assert.match(workflow, /actions\/setup-node@[0-9a-f]{40}/);
 });
@@ -88,9 +88,45 @@ test('package declares the split MCP v2 server/client packages and exposes the d
   assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/server'], 'string');
   assert.equal(typeof packageJson.dependencies?.['@modelcontextprotocol/client'], 'string');
   assert.equal(packageJson.dependencies?.['@modelcontextprotocol/sdk'], undefined);
+  assert.equal(packageJson.peerDependenciesMeta?.['@earendil-works/pi-coding-agent']?.optional, true);
+  assert.equal(packageJson.dependencies?.pptxgenjs, undefined);
+  assert.equal(packageJson.peerDependencies?.pptxgenjs, '^4.0.1');
+  assert.equal(packageJson.peerDependenciesMeta?.pptxgenjs?.optional, true);
+  const pptxExporter = read('plugins/visual-explainer/pptx/export.mjs');
+  assert.doesNotMatch(pptxExporter, /^import .* from ['"]pptxgenjs['"];?$/m);
+  assert.match(pptxExporter, /await import\(['"]pptxgenjs['"]\)/);
+  assert.match(pptxExporter, /optional PPTX dependency/i);
   assert.equal(
     packageJson.bin?.['visual-explainer-task-proof-mcp'],
     './plugins/visual-explainer/task-proof/mcp-server.mjs',
   );
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('release path verifies the locked package artifact before creating a GitHub prerelease', () => {
+  const packageJson = parse('package.json');
+  const packageLock = parse('package-lock.json');
+  const releaseWorkflow = read('.github/workflows/release.yml');
+  const releaseSmoke = read('plugins/visual-explainer/task-proof/release-package-smoke.mjs');
+  const readme = read('README.md');
+
+  assert.equal(packageLock.lockfileVersion, 3);
+  assert.equal(packageLock.packages?.['']?.version, packageJson.version);
+  assert.equal(
+    packageJson.scripts?.['test:release-package'],
+    'node plugins/visual-explainer/task-proof/release-package-smoke.mjs',
+  );
+  assert.equal(
+    packageJson.scripts?.['verify:release'],
+    'npm run verify:task-proof && npm run test:release-package',
+  );
+  assert.match(releaseSmoke, /npm pack/);
+  assert.match(releaseSmoke, /node_modules/);
+  assert.match(releaseSmoke, /packed-artifact/);
+  assert.match(releaseWorkflow, /tags:\s*\n\s*- ['"]v\*['"]/);
+  assert.match(releaseWorkflow, /npm ci --ignore-scripts/);
+  assert.match(releaseWorkflow, /npm run verify:release/);
+  assert.match(releaseWorkflow, /gh release create/);
+  assert.match(releaseWorkflow, /--prerelease/);
+  assert.match(readme, /dongfanghong656\/visual-explainer\/releases\/download/);
 });

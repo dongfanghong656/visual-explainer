@@ -48,3 +48,10 @@
 - Date: 2026-08-27
 - Decision: public final-gate adapters are in-process function factories in one immutable registry, and every public `task_proof_*` MCP tool must have an explicit reviewed classification before registration.
 - Consequence: request JSON cannot inject verifier functions or adapter identities; missing adapters and unclassified future tools fail closed.
+
+## DEC-0009 — Publish the alpha through a verified GitHub release artifact
+
+- Status: ACCEPTED
+- Date: 2026-08-27
+- Decision: publish `0.11.0-alpha.1` as a GitHub prerelease artifact after exact-head CI, distinct review, and a clean packed-install handshake. Do not publish under the upstream-owned unscoped npm name.
+- Consequence: the tag workflow installs the lockfile with lifecycle scripts and optional peers disabled, verifies source/tests/MCP/packed installation, audits the default dependency set, and only then creates the prerelease. Pi and PPTX libraries remain optional operator-installed peers.
