@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Added Codex Skill dependency metadata for the general renderer and Task Proof MCP servers, plus a three-tool general-renderer stdio handshake in source and packed-artifact verification.
 - Added a server-owned trusted-adapter registry for repository authority, strict-review evidence, repository named checks, and exact-snapshot lifecycle verification.
 - Added default-deny MCP registration so every public `task_proof_*` tool must have an explicit reviewed classification before server startup.
 - Added a locked GitHub prerelease workflow that verifies the complete Task Proof suite and a clean installation of the packed artifact before publication.
@@ -10,6 +11,7 @@
 - Added an exact-head CI R2 review job that reconstructs accepted requirements and reruns the release gate after the Node 20/22 matrix succeeds.
 
 ### Fixed
+- Restored local Codex activation by documenting and registering both MCP servers, adding Chinese discovery phrases to both Skills, and making a Codex restart/new-task boundary explicit.
 - Updated Protocol 2.4 adversarial fixtures and public Task Proof Skill/command instructions so the exact Node 20/22 CI path no longer fails on migrated criterion locators or the contract-mandatory workflow.
 - Made Pi and PPTX host libraries optional peers so the default Task Proof deployment excludes unrelated high-severity advisory chains; the PPTX entry now reports the optional dependency requirement explicitly.
 - Bound pull-request checkouts explicitly to the PR head SHA instead of GitHub's synthetic merge-preview revision.

@@ -1,0 +1,8 @@
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "visual-explainer-task-proof"
+      description: "Local Task Proof evidence and review MCP server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

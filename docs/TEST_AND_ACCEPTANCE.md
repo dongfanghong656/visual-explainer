@@ -24,6 +24,9 @@
 | EVD-0018 | Final PR #4 exact-head matrix and R2 review at `96afc5ffb9796e82c5ecfdc492fddc7cec68434f` | PASS_WITH_LIMITS | GitHub Actions run `33077809112` | Node 20/22 passed; R2 ran 107 Linux tests, clean 97-file install, eight-tool handshakes, 0-vulnerability audit, and exact-head report |
 | EVD-0019 | Tagged GitHub prerelease workflow | PASS | Tag `v0.11.0-alpha.1`; run `33077966508`; merge `d83a072` | Full release gate and audit passed before publishing the 97-file `.tgz`; public prerelease, not stable/npm registry publication |
 | EVD-0020 | Downloaded public artifact and Codex deployment readback | PASS | GitHub asset SHA-256 `11bb3dc3...e0e8be72`; Windows Node 22 / Codex host | Normal global package `0.11.0-alpha.1`, deployed eight-tool handshake, versioned Skill present, Codex MCP enabled |
+| EVD-0021 | Local integration source and release regression | PASS | Windows Node 22; TURN-0006 working tree | 109 strict tests: 105 passed, 0 failed, 4 Windows capability skips; both Skill validators pass |
+| EVD-0022 | Active local configuration and installed-package dual handshakes | PASS | `C:\codex-home\config.toml`; global `0.11.0-alpha.1` install | Both servers enabled; general renderer exposes 3 tools and Task Proof exposes 8 tools |
+| EVD-0023 | Fresh Codex session live call | PASS_WITH_SCOPE | Ephemeral local Codex CLI, 2026-09-04 | Called `visual_explainer_prepare` once and received the requested topic; does not prove hot-loading in the already-running desktop process or Task Proof auto-selection |
 
 ## Contract-authority acceptance matrix
 
@@ -40,7 +43,8 @@
 | Public MCP/Skill enforcement | EXACT_HEAD_CI_VERIFIED | Contract-free/mismatched inputs, trusted registry, and default-deny tests pass on Node 20/22 |
 | Independent acceptance | R2_PASS_WITH_LIMITS_CI | Automated exact-head CI isolation passes; no different-human/model R3 review |
 | Release readiness | ALPHA_PUBLISHED_AND_DEPLOYED | Stable promotion and long-term outcome observation remain separate |
+| Local Codex discovery/activation | FRESH_CLI_LIVE_CALL_PASS | Restart desktop and observe selection in a normal new desktop task |
 
 ## Current conclusion
 
-Task Contract Protocol 2.4 and Public Enforcement 1.0 passed the final exact-head Node 20/22 matrix and automated R2 review with documented limitations. PR #4 is merged, the tagged release gate passed, the GitHub prerelease is public, and its downloaded asset is installed and registered in Codex with an eight-tool handshake. Stable promotion, different-human/model R3 review, external authority adapters, and observed long-term user outcomes remain outside this alpha acceptance.
+Task Contract Protocol 2.4 and Public Enforcement 1.0 passed the final exact-head Node 20/22 matrix and automated R2 review with documented limitations. PR #4 is merged, the GitHub prerelease remains public, and its downloaded asset is installed. TURN-0006 restored and source-backed both local MCP registrations, separately handshook their 3-tool and 8-tool surfaces, and completed a live general-renderer call in a fresh Codex CLI session. The already-running desktop process still requires restart. Stable promotion, different-human/model R3 review, external authority adapters, web integration, and observed long-term user outcomes remain outside this acceptance.

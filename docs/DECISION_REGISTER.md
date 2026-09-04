@@ -62,3 +62,11 @@
 - Date: 2026-08-27
 - Decision: after both Node matrix jobs pass, a separate GitHub Actions job checks out the literal PR head, reconstructs every accepted repository requirement, reruns the locked release gate and audit, and emits an R2 `PASS_WITH_LIMITS` review record.
 - Consequence: this supplies a distinct deterministic reviewer run without claiming a different human/model or universal omission detection. The check must pass for the exact merge candidate, and its stated limitations remain release-visible.
+
+## DEC-0011 — Bind each local Skill to its own MCP server
+
+- Status: ACCEPTED
+- Date: 2026-09-04
+- Decision: keep the general renderer and Task Proof as two explicitly named local stdio MCP servers, and declare each dependency in the corresponding Skill metadata.
+- Rationale: a deployed package or copied Skill does not make an unregistered tool callable, while combining unrelated tool contracts would blur their activation boundaries.
+- Consequence: local installation and release verification must check the three-tool renderer and eight-tool Task Proof surfaces separately; Codex must restart before a previously running desktop process can consume config changes.

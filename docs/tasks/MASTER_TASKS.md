@@ -9,3 +9,4 @@
 | TASK-0005 | Execute clean-install MCP E2E, independent acceptance, and release decision | all | DONE_WITH_R2_LIMITS | PR merged; tagged GitHub prerelease and downloaded Codex deployment readback pass | [detail](TASK-0005.md) |
 | TASK-0006 | Harden frozen contract authority core | REQ-0006, REQ-0007 | CI_VERIFIED | Protocol 2.4, schema, tests, and exact-head Node 20/22 CI | [detail](TASK-0006.md) |
 | TASK-0007 | Enforce Task Contract in all public Author/Reviewer paths | REQ-0001–REQ-0007 | ALPHA_DEPLOYED_WITH_R2_LIMITS | Mandatory MCP/Skill gate, trusted registry, negative tests, exact-head R2, tag and deployed handshake | [detail](TASK-0007.md) |
+| TASK-0008 | Repair local Codex discovery and dual-MCP activation | REQ-0008 | DONE_WITH_DESKTOP_RESTART_REQUIRED | Skill dependency metadata, dual registration, source/packed handshakes, fresh-session live call | [detail](TASK-0008.md) |

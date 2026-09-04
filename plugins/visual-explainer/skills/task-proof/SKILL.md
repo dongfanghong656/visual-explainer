@@ -1,6 +1,6 @@
 ---
 name: task-proof
-description: Use when an AI agent is about to claim that project work is complete, when a user asks what the AI changed and what remains, or when an independent agent must audit another agent's completion claim. Produces a one-screen causal change diagram backed by snapshot-bound JSON evidence and an independent computed review gate.
+description: Use for 完成总结、项目交付、验收, when an AI agent is about to claim project work is complete, when a user asks what changed and what remains, or when an independent agent audits a completion claim. Produces a one-screen causal change diagram backed by snapshot-bound JSON evidence and an independent computed review gate.
 ---
 
 # Task Proof

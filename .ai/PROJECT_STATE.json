@@ -6,7 +6,7 @@
     "owner": "dongfanghong656",
     "name": "visual-explainer",
     "defaultBranch": "main",
-    "managedBranch": "codex/turn-0005-deployment-record"
+    "managedBranch": "codex/local-codex-integration-repair-v011"
   },
   "authorityPaths": {
     "agentContract": "PROJECT_AGENT.md",
@@ -24,43 +24,44 @@
     "handoff": "docs/HANDOFF.md",
     "contractAuthority": "docs/task-proof/TURN-0003_CONTRACT_AUTHORITY_STATUS.md",
     "publicEnforcement": "docs/task-proof/TURN-0004_PUBLIC_ENFORCEMENT_STATUS.md",
-    "releaseCandidate": "docs/task-proof/TURN-0005_RELEASE_CANDIDATE_STATUS.md"
+    "releaseCandidate": "docs/task-proof/TURN-0005_RELEASE_CANDIDATE_STATUS.md",
+    "localCodexIntegration": "docs/turns/2026/09/TURN-0006.md"
   },
-  "phase": "ALPHA_DEPLOYED",
-  "milestone": "Verified GitHub prerelease artifact and installed Codex deployment",
+  "phase": "ALPHA_LOCAL_INTEGRATION_REPAIRED",
+  "milestone": "Dual local MCP configuration and fresh Codex CLI live call verified",
   "sync": {
-    "status": "GITHUB_PRERELEASE_DEPLOYED_RECORD_SYNCED",
-    "baseRevision": "d83a07290b2658c2936d6040c7ff4f60316b6930",
+    "status": "LOCAL_REPAIR_SYNCED_PENDING_SELF_REFERENCE",
+    "baseRevision": "b132b432bb411f2e768e3e0e95fe95bc07600e62",
     "lastSyncedCommit": "PENDING_SELF_REFERENCE",
-    "latestTurn": "TURN-0005",
-    "latestCheckpoint": "CHK-0005",
+    "latestTurn": "TURN-0006",
+    "latestCheckpoint": "CHK-0006",
     "pendingSelfReference": true
   },
   "counters": {
-    "requirement": 8,
-    "spec": 5,
-    "task": 8,
-    "artifact": 9,
-    "evidence": 21,
-    "decision": 11,
-    "risk": 12,
-    "checkpoint": 6,
-    "turn": 6,
+    "requirement": 9,
+    "spec": 6,
+    "task": 9,
+    "artifact": 11,
+    "evidence": 24,
+    "decision": 12,
+    "risk": 13,
+    "checkpoint": 7,
+    "turn": 7,
     "release": 2
   },
   "active": {
-    "requirements": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0007"],
-    "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003", "SPEC-0004"],
+    "requirements": ["REQ-0001", "REQ-0002", "REQ-0003", "REQ-0004", "REQ-0005", "REQ-0006", "REQ-0007", "REQ-0008"],
+    "specs": ["SPEC-0001", "SPEC-0002", "SPEC-0003", "SPEC-0004", "SPEC-0005"],
     "tasks": [],
-    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006", "ART-0007", "ART-0008", "ART-0009"],
-    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0007"],
+    "artifacts": ["ART-0001", "ART-0002", "ART-0003", "ART-0004", "ART-0005", "ART-0006", "ART-0007", "ART-0008", "ART-0009", "ART-0010"],
+    "risks": ["RSK-0002", "RSK-0003", "RSK-0004", "RSK-0005", "RSK-0007", "RSK-0012"],
     "releases": ["REL-0001"]
   },
   "gates": {
-    "developmentAcceptance": "EXACT_HEAD_NODE_MATRIX_AND_R2_PASS_WITH_LIMITS_AT_96afc5f",
+    "developmentAcceptance": "LOCAL_SOURCE_PACKED_INSTALLED_AND_FRESH_CLI_LIVE_CALL_PASS",
     "release": "GITHUB_PRERELEASE_PUBLISHED_AND_CODEX_DEPLOYED_WITH_R2_LIMITS",
-    "reason": "PR #4 merged at d83a072 after exact-head Node 20/22 and R2 success. Tag v0.11.0-alpha.1 passed the release workflow; its public asset was downloaded, digest-checked, globally installed, handshaken, installed as a Skill, and registered as an enabled Codex MCP server."
+    "reason": "The GitHub prerelease remains unchanged. TURN-0006 added Skill dependency metadata and dual-server verification, restored both installed-package MCP registrations, passed source and packed handshakes, and completed a live general-renderer call in a fresh Codex CLI session. The already-running desktop process still requires restart."
   },
   "blockers": [],
-  "nextAction": "Observe the alpha deployment, retain the disclosed external-authority and reviewer-independence limitations, and schedule a different-human/model R3 review before any stable release."
+  "nextAction": "Restart Codex desktop, open a normal new task, confirm both servers in /mcp, and observe a genuine visual request; retain the R3 and stable-release limitations."
 }

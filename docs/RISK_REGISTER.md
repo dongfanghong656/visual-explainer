@@ -13,5 +13,6 @@
 | RSK-0009 | Caller-supplied evidence/lifecycle `PASS` values can launder completion. | CRITICAL | MITIGATED | Server-owned verifiers and request-schema rejection pass exact-head CI. |
 | RSK-0010 | Contract/public PR may pass targeted tests but still regress the whole package. | HIGH | MITIGATED | Final PR head `96afc5f` passed Node 20/22 and R2; the tag repeated the full release gate before publication. |
 | RSK-0011 | Default installation may inherit high-severity advisories from non-core Pi/PPTX hosts. | HIGH | MITIGATED | Both hosts are optional peers, CI/tag deployment omits them, and the default audit reports 0 vulnerabilities locally, in R2, and on the release tag. |
+| RSK-0012 | Active Codex configuration can be regenerated or replaced after package deployment, leaving Skills present while MCP servers disappear. | HIGH | MITIGATED_MONITORED | Keep dual registration commands documented, declare Skill dependencies, verify active config plus a fresh-session call after repair; re-register if a later config change removes either server. |
 
 No risk is closed merely because implementation files exist or an author-generated diagram is coherent.

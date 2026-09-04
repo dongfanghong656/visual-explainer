@@ -12,6 +12,7 @@
 | W6 Frozen task authority | Prevent claimant-selected acceptance sets and verifier laundering | TASK-0006 | Contract core passes exact-head CI/readback | CI_VERIFIED |
 | W7 Mandatory public enforcement | Route every public Author/Reviewer path through the contract core | TASK-0007 | Negative public-entrypoint tests and independent R2/R3 acceptance | ALPHA_DEPLOYED_R2_PASS_WITH_LIMITS |
 | W8 Release decision | Merge, tag, publish, or remain blocked based on explicit release evidence | TASK-0005 | No unresolved alpha blocker and explicit approval | GITHUB_PRERELEASE_DEPLOYED |
+| W9 Local Codex activation repair | Make both released local MCP surfaces discoverable and callable from fresh Codex tasks | TASK-0008 | Skill metadata validates, both servers handshake, fresh session live-call succeeds | DONE_WITH_DESKTOP_RESTART_REQUIRED |
 
 ## Critical path
 

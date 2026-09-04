@@ -22,6 +22,15 @@
 - Public asset: `visual-explainer-0.11.0-alpha.1.tgz`, 97 files, SHA-256 `11bb3dc3c5e69acf60128b517c08149ff8b5c8f703c48a93d4c9212be0e8be72`.
 - Host deployment: normal global npm install `0.11.0-alpha.1`, deployed eight-tool handshake PASS, Skill installed at `C:\codex-home\skills\visual-explainer`, Codex MCP `visual-explainer-task-proof` enabled.
 
+## Post-release local integration repair — 2026-09-04
+
+- The active Codex configuration had been regenerated after release and no longer contained the recorded Task Proof server; the general renderer had never been registered by the prior deployment path.
+- Both installed-package stdio servers are now registered and enabled: `visual-explainer` (3 tools) and `visual-explainer-task-proof` (8 tools).
+- Both Skills declare their matching MCP dependency and pass the current Skill validator.
+- Source and packed-artifact verification now handshake both server surfaces.
+- A fresh ephemeral Codex CLI session exposed and called `visual_explainer_prepare` successfully.
+- This host repair does not change the immutable `v0.11.0-alpha.1` GitHub asset. The current desktop process must restart before it can load the repaired configuration.
+
 ## Claims explicitly not made
 
 - Automated exact-head R2 acceptance is `PASS_WITH_LIMITS`; no different-human/model R3 acceptance exists.

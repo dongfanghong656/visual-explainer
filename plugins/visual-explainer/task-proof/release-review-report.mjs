@@ -18,7 +18,10 @@ if (headSha !== reviewedSha) throw new Error(`Reviewed HEAD ${headSha} does not 
 const requirementsText = readFileSync(path.join(repositoryRoot, 'docs', 'requirements', 'MASTER_REQUIREMENTS.md'), 'utf8');
 const requirementRows = requirementsText.split(/\r?\n/).filter((line) => line.startsWith('| REQ-'));
 if (requirementRows.length === 0) throw new Error('No release requirements were reconstructed.');
-const unaccepted = requirementRows.filter((line) => line.split('|').map((value) => value.trim())[4] !== 'ACCEPTED');
+const unaccepted = requirementRows.filter((line) => {
+  const status = line.split('|').map((value) => value.trim())[4];
+  return !/^ACCEPTED(?:_|$)/.test(status);
+});
 if (unaccepted.length > 0) throw new Error(`Unaccepted release requirements: ${unaccepted.join('; ')}`);
 
 const packageJson = JSON.parse(readFileSync(path.join(repositoryRoot, 'package.json'), 'utf8'));

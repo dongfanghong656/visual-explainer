@@ -86,10 +86,11 @@
   "scripts": {
     "check:task-proof": "node plugins/visual-explainer/task-proof/verify-source.mjs",
     "test:task-proof": "node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs",
+    "test:visual-explainer:mcp": "node plugins/visual-explainer/mcp/mcp-handshake.mjs",
     "test:task-proof:mcp": "node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs",
     "test:release-package": "node plugins/visual-explainer/task-proof/release-package-smoke.mjs",
     "verify:task-proof": "npm run check:task-proof && npm run test:task-proof && npm run test:task-proof:mcp",
-    "verify:release": "npm run verify:task-proof && npm run test:release-package"
+    "verify:release": "npm run test:visual-explainer:mcp && npm run verify:task-proof && npm run test:release-package"
   },
   "engines": {
     "node": ">=20"

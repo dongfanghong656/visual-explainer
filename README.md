@@ -176,14 +176,27 @@ cp /tmp/visual-explainer/plugins/visual-explainer/commands/*.md ~/.codex/prompts
 rm -rf /tmp/visual-explainer
 ```
 
-Invoke with `$visual-explainer` or ask Codex to use the `visual-explainer` skill. If prompts are installed and supported, use `/prompts:diff-review`, `/prompts:plan-review`, etc.
+Invoke with `$visual-explainer` or ask Codex to use the `visual-explainer` skill. If prompts are installed and supported, use `/prompts:diff-review`, `/prompts:plan-review`, etc. The installed Skill declares the general renderer MCP dependency, while the nested Task Proof Skill declares the separate evidence/review MCP dependency.
 
-Register the installed Task Proof MCP server with Codex and confirm that it is enabled:
+Register both installed MCP servers with Codex and confirm that both are enabled:
 
 ```bash
+codex mcp add visual-explainer -- visual-explainer-mcp
 codex mcp add visual-explainer-task-proof -- visual-explainer-task-proof-mcp
 codex mcp list
 ```
+
+On Windows, register the absolute Node.js entrypoints instead of npm command shims:
+
+```powershell
+$packageRoot = Join-Path (npm root -g) 'visual-explainer'
+$nodePath = (Get-Command node).Source
+codex mcp add visual-explainer -- $nodePath (Join-Path $packageRoot 'plugins\visual-explainer\mcp\server.mjs')
+codex mcp add visual-explainer-task-proof -- $nodePath (Join-Path $packageRoot 'plugins\visual-explainer\task-proof\mcp-server.mjs')
+codex mcp list
+```
+
+Restart Codex after changing MCP configuration, then open a new task and use `/mcp` to confirm that both servers are connected. A configured server is not evidence that an already-running task has loaded its tools.
 
 **OpenCode/opencode:**
 ```bash

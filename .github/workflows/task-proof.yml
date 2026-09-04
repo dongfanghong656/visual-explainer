@@ -63,8 +63,8 @@ jobs:
         env:
           TASK_PROOF_ALLOW_EXECUTION: '1'
         run: node plugins/visual-explainer/task-proof/run-all-tests-strict.mjs
-      - name: Verify MCP tool contract and real stdio handshake
-        run: node plugins/visual-explainer/task-proof/mcp-contract.mjs && node plugins/visual-explainer/task-proof/mcp-handshake.mjs
+      - name: Verify general and Task Proof MCP contracts and real stdio handshakes
+        run: npm run test:visual-explainer:mcp && npm run test:task-proof:mcp
 
   independent-release-review:
     name: Independent R2 release review

@@ -9,5 +9,6 @@
 | REQ-0005 | Reusable Skill/MCP distribution and upstream compatibility | P1 | ACCEPTED | [REQ-0005](REQ-0005.md) | GitHub prerelease published; normal global package, versioned Skill, and enabled Codex MCP read back |
 | REQ-0006 | Single strict runtime and reproducible evidence identity | P0 | ACCEPTED | [REQ-0006](REQ-0006.md) | Public path delegates to the strict gate and default-deny tool registry |
 | REQ-0007 | Frozen, authority-bound task contract | P0 | ACCEPTED | [REQ-0007](REQ-0007.md) | Protocol 2.4 is mandatory and exact-head R2/tag/deployment verified within repository-authority scope |
+| REQ-0008 | Discoverable and callable local Codex integration | P0 | ACCEPTED_LOCAL_CLI_VERIFIED | [REQ-0008](REQ-0008.md) | Both Skills bind their stdio MCP dependencies; both servers are registered and a fresh Codex CLI session called the general renderer |
 
-All declared repository-authority alpha requirements are deployed with documented limits. `docs/TRACEABILITY_MATRIX.md` records the remaining R3, external-authority, stable-promotion, and outcome-observation boundaries.
+All declared repository-authority alpha requirements are deployed with documented limits. The post-release local Codex activation repair is source-tested and live-called in a fresh CLI session; the already-running desktop process still requires restart. `docs/TRACEABILITY_MATRIX.md` records the remaining R3, external-authority, stable-promotion, and outcome-observation boundaries.

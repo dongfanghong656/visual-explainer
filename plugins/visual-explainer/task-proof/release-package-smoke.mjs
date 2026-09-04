@@ -9,6 +9,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyVisualExplainerMcp } from '../mcp/mcp-handshake-core.mjs';
 import { verifyTaskProofMcp } from './mcp-handshake-core.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -53,14 +54,22 @@ try {
   if (installedPackage.version !== packageJson.version) {
     throw new Error(`Installed package version ${installedPackage.version} does not match ${packageJson.version}.`);
   }
-  const serverPath = path.join(installedRoot, 'plugins', 'visual-explainer', 'task-proof', 'mcp-server.mjs');
-  const handshake = await verifyTaskProofMcp({
+  const visualServerPath = path.join(installedRoot, 'plugins', 'visual-explainer', 'mcp', 'server.mjs');
+  const visualHandshake = await verifyVisualExplainerMcp({
     command: process.execPath,
-    args: [serverPath],
+    args: [visualServerPath],
+    cwd: repositoryRoot,
+    environment: process.env,
+    server: 'packed-artifact-general-renderer',
+  });
+  const taskProofServerPath = path.join(installedRoot, 'plugins', 'visual-explainer', 'task-proof', 'mcp-server.mjs');
+  const taskProofHandshake = await verifyTaskProofMcp({
+    command: process.execPath,
+    args: [taskProofServerPath],
     cwd: repositoryRoot,
     repositoryPath: repositoryRoot,
     environment: process.env,
-    server: 'packed-artifact',
+    server: 'packed-artifact-task-proof',
   });
   const pptxPath = path.join(installedRoot, 'plugins', 'visual-explainer', 'pptx', 'export.mjs');
   const pptxHelp = execFileSync(process.execPath, [pptxPath, '--help'], {
@@ -84,7 +93,8 @@ try {
     package: packageJson.name,
     version: packageJson.version,
     files: packed[0].files.length,
-    handshake,
+    visualHandshake,
+    taskProofHandshake,
     optionalPptxDependency: 'reported',
   }, null, 2));
 } finally {

@@ -9,6 +9,7 @@
 | REQ-0005 | SPEC-0001, SPEC-0004 | TASK-0001, TASK-0004, TASK-0005, TASK-0007 | Package, Skill, MCP, docs | GitHub prerelease public; global package, Skill, and Codex MCP read back | ALPHA_DEPLOYED | Stable/npm-registry publication not claimed |
 | REQ-0006 | SPEC-0002–SPEC-0004 | TASK-0006, TASK-0007 | Strict runtime, identity, verifier-bound gates | Public path/default-deny pass exact-head R2 and tag verification | PASS_WITH_LIMITS | External authority remains unsupported |
 | REQ-0007 | SPEC-0003, SPEC-0004 | TASK-0006, TASK-0007 | Contract runtime/schema/receipts/public path | Protocol 2.4 mandatory; R2 and deployed public path verified | PASS_WITH_LIMITS | No different-human/model R3 acceptance |
+| REQ-0008 | SPEC-0005 | TASK-0008 | Skill dependency metadata, dual local MCP registration, handshake clients | Source/packed/installed handshakes pass; fresh Codex CLI live-call pass | PASS_WITH_DESKTOP_RESTART_REQUIRED | Local host repair only; web and stable release unchanged |
 
 ## Alpha deployment boundary
 

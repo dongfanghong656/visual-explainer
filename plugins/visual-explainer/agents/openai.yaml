@@ -1,0 +1,8 @@
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "visual-explainer"
+      description: "Local Visual Explainer renderer MCP server"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

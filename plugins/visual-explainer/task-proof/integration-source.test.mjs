@@ -51,6 +51,43 @@ test('plugin contains discoverable skill and claimant/reviewer commands', () => 
   assert.match(skill, /contractGate/);
 });
 
+test('Codex local integration binds both skills to their stdio MCP servers', () => {
+  const packageJson = parse('package.json');
+  const visualSkill = read('plugins/visual-explainer/SKILL.md');
+  const taskProofSkill = read('plugins/visual-explainer/skills/task-proof/SKILL.md');
+  const visualMetadata = read('plugins/visual-explainer/agents/openai.yaml');
+  const taskProofMetadata = read('plugins/visual-explainer/skills/task-proof/agents/openai.yaml');
+  const readme = read('README.md');
+
+  assert.equal(
+    packageJson.bin?.['visual-explainer-mcp'],
+    './plugins/visual-explainer/mcp/server.mjs',
+  );
+  assert.match(visualMetadata, /value:\s*["']visual-explainer["']/);
+  assert.match(visualMetadata, /transport:\s*["']stdio["']/);
+  assert.match(visualMetadata, /allow_implicit_invocation:\s*true/);
+  assert.match(taskProofMetadata, /value:\s*["']visual-explainer-task-proof["']/);
+  assert.match(taskProofMetadata, /transport:\s*["']stdio["']/);
+  assert.match(taskProofMetadata, /allow_implicit_invocation:\s*true/);
+  assert.match(visualSkill, /可视化|架构图|流程图|项目回顾/);
+  assert.match(taskProofSkill, /完成总结|项目交付|验收/);
+  assert.match(readme, /codex mcp add visual-explainer --/);
+  assert.match(readme, /codex mcp add visual-explainer-task-proof --/);
+  assert.match(readme, /restart Codex/i);
+});
+
+test('release verification handshakes the general renderer and Task Proof MCP surfaces', () => {
+  const packageJson = parse('package.json');
+  const releaseSmoke = read('plugins/visual-explainer/task-proof/release-package-smoke.mjs');
+
+  assert.equal(
+    packageJson.scripts?.['test:visual-explainer:mcp'],
+    'node plugins/visual-explainer/mcp/mcp-handshake.mjs',
+  );
+  assert.match(releaseSmoke, /verifyVisualExplainerMcp/);
+  assert.match(releaseSmoke, /plugins["'],\s*["']visual-explainer["'],\s*["']mcp["'],\s*["']server\.mjs["']/);
+});
+
 test('repository-owned check policy controls evidence kinds and strict test discovery', () => {
   const policy = parse('.task-proof/checks.json');
   assert.equal(policy.version, 1);
@@ -65,7 +102,8 @@ test('repository-owned check policy controls evidence kinds and strict test disc
 test('CI runs the strict test finder and a real MCP stdio handshake', () => {
   const workflow = read('.github/workflows/task-proof.yml');
   assert.match(workflow, /run-all-tests-strict\.mjs/);
-  assert.match(workflow, /mcp-handshake\.mjs/);
+  assert.match(workflow, /npm run test:visual-explainer:mcp/);
+  assert.match(workflow, /npm run test:task-proof:mcp/);
   assert.match(workflow, /npm ci --ignore-scripts/);
   assert.match(workflow, /ref:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
   assert.match(workflow, /actions\/checkout@[0-9a-f]{40}/);
@@ -85,6 +123,8 @@ test('CI records a distinct exact-head R2 release review after the matrix passes
 });
 
 test('R2 report accepts the authorized release lifecycle decision', () => {
+  const reviewer = read('plugins/visual-explainer/task-proof/release-review-report.mjs');
+  assert.match(reviewer, /\^ACCEPTED\(\?:_\|\$\)/);
   const headSha = execFileSync('git', ['-C', repositoryRoot, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
     windowsHide: true,
@@ -150,7 +190,7 @@ test('release path verifies the locked package artifact before creating a GitHub
   );
   assert.equal(
     packageJson.scripts?.['verify:release'],
-    'npm run verify:task-proof && npm run test:release-package',
+    'npm run test:visual-explainer:mcp && npm run verify:task-proof && npm run test:release-package',
   );
   assert.match(releaseSmoke, /npm pack/);
   assert.match(releaseSmoke, /node_modules/);
